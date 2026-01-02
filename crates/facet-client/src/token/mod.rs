@@ -11,7 +11,10 @@
 //
 
 pub mod mem;
+pub mod postgres;
+
 pub use mem::MemoryTokenStore;
+pub use postgres::PostgresTokenStore;
 
 const FIVE_SECONDS_MILLIS: i64 = 5_000;
 

@@ -11,7 +11,7 @@
 //
 
 use crate::lock::LockManager;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use bon::Builder;
 use sqlx::PgPool;
@@ -111,6 +111,8 @@ impl PostgresLockManager {
     ///
     /// Returns an error if the database operation fails.
     pub async fn initialize(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS distributed_locks (
             identifier VARCHAR(255) PRIMARY KEY,
@@ -118,13 +120,14 @@ impl PostgresLockManager {
             acquired_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&mut *tx)
+        .await?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_distributed_locks_acquired_at ON distributed_locks(acquired_at)")
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
 
+        tx.commit().await?;
         Ok(())
     }
 }
@@ -140,9 +143,9 @@ impl LockManager for PostgresLockManager {
             "DELETE FROM distributed_locks
          WHERE EXTRACT(EPOCH FROM (NOW() - acquired_at)) * 1000 > $1",
         )
-            .bind(self.timeout_ms)
-            .execute(&mut *tx)
-            .await?;
+        .bind(self.timeout_ms)
+        .execute(&mut *tx)
+        .await?;
 
         // Try to insert the lock with server timestamp
         let result = sqlx::query(
@@ -150,10 +153,10 @@ impl LockManager for PostgresLockManager {
          VALUES ($1, $2, NOW())
          ON CONFLICT (identifier) DO NOTHING",
         )
-            .bind(identifier)
-            .bind(owner)
-            .execute(&mut *tx)
-            .await?;
+        .bind(identifier)
+        .bind(owner)
+        .execute(&mut *tx)
+        .await?;
 
         // Check if insert succeeded
         if result.rows_affected() > 0 {
@@ -163,9 +166,7 @@ impl LockManager for PostgresLockManager {
         }
 
         // Lock already exists, verify ownership within the current transaction to avoid race conditions
-        let (existing_owner,): (String,) = sqlx::query_as(
-            "SELECT owner FROM distributed_locks WHERE identifier = $1",
-        )
+        let (existing_owner,): (String,) = sqlx::query_as("SELECT owner FROM distributed_locks WHERE identifier = $1")
             .bind(identifier)
             .fetch_one(&mut *tx)
             .await?;
@@ -178,10 +179,10 @@ impl LockManager for PostgresLockManager {
         } else {
             // Different owner holds the lock
             Err(anyhow!(
-            "Lock for identifier '{}' is already held by '{}'",
-            identifier,
-            existing_owner
-        ))
+                "Lock for identifier '{}' is already held by '{}'",
+                identifier,
+                existing_owner
+            ))
         }
     }
 
