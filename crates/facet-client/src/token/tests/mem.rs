@@ -12,12 +12,12 @@
 
 use crate::token::{MemoryTokenStore, TokenData, TokenStore};
 use crate::util::{Clock, MockClock};
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{TimeDelta, Utc};
 use std::sync::Arc;
 
 async fn create_store_with_tokens() -> MemoryTokenStore {
     let store = MemoryTokenStore::new();
-    let expiration = Utc::now() + ChronoDuration::seconds(10);
+    let expiration = Utc::now() + TimeDelta::seconds(10);
 
     store
         .save_token(TokenData {
@@ -65,7 +65,7 @@ async fn test_new_store_is_empty() {
 #[tokio::test]
 async fn test_save_token_success() {
     let store = MemoryTokenStore::new();
-    let expiration = Utc::now() + ChronoDuration::seconds(10);
+    let expiration = Utc::now() + TimeDelta::seconds(10);
     let test_data = TokenData {
         identifier: "user1".to_string(),
         token: "token123".to_string(),
@@ -102,7 +102,7 @@ async fn test_remove_tokens_used_before_success() {
     let initial = Utc::now();
     let clock = Arc::new(MockClock::new(initial));
     let store = MemoryTokenStore::with_clock(clock.clone());
-    let expiration = initial + ChronoDuration::seconds(10);
+    let expiration = initial + TimeDelta::seconds(10);
 
     store
         .save_token(TokenData {
@@ -115,7 +115,7 @@ async fn test_remove_tokens_used_before_success() {
         .await
         .expect("Failed to save");
 
-    let cutoff = clock.now() + ChronoDuration::seconds(1);
+    let cutoff = clock.now() + TimeDelta::seconds(1);
 
     let removed = store
         .remove_tokens_accessed_before(cutoff)

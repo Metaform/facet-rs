@@ -12,9 +12,9 @@
 
 mod common;
 
+use chrono::{TimeDelta, Utc};
 use facet_client::token::{PostgresTokenStore, TokenData, TokenStore};
 use facet_client::util::{Clock, MockClock};
-use chrono::{Duration, Utc};
 use std::sync::Arc;
 
 use common::setup_postgres_container;
@@ -24,10 +24,7 @@ async fn test_postgres_token_store_initialization_idempotent() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
 
     // Initialize multiple times - should not fail
     store.initialize().await.unwrap();
@@ -40,13 +37,10 @@ async fn test_postgres_save_and_get_token() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(3600);
+    let expires_at = initial_time + TimeDelta::seconds(3600);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "access_token_123".to_string(),
@@ -70,10 +64,7 @@ async fn test_postgres_get_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
     let result = store.get_token("nonexistent").await;
@@ -86,14 +77,11 @@ async fn test_postgres_save_token_overwrites_existing() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at_1 = initial_time + Duration::seconds(1000);
-    let expires_at_2 = initial_time + Duration::seconds(2000);
+    let expires_at_1 = initial_time + TimeDelta::seconds(1000);
+    let expires_at_2 = initial_time + TimeDelta::seconds(2000);
 
     let token_data1 = TokenData {
         identifier: "user1".to_string(),
@@ -125,13 +113,10 @@ async fn test_postgres_update_token_success() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
@@ -142,7 +127,7 @@ async fn test_postgres_update_token_success() {
 
     store.save_token(token_data).await.unwrap();
 
-    let new_expires_at = initial_time + Duration::seconds(2000);
+    let new_expires_at = initial_time + TimeDelta::seconds(2000);
     let updated_data = TokenData {
         identifier: "user1".to_string(),
         token: "token_updated".to_string(),
@@ -164,13 +149,10 @@ async fn test_postgres_update_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "nonexistent".to_string(),
         token: "token".to_string(),
@@ -189,13 +171,10 @@ async fn test_postgres_remove_token_success() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
@@ -216,10 +195,7 @@ async fn test_postgres_remove_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
     // Should succeed even if the token doesn't exist
@@ -232,13 +208,10 @@ async fn test_postgres_multiple_tokens() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
 
     let token1 = TokenData {
         identifier: "user1".to_string(),
@@ -271,13 +244,10 @@ async fn test_postgres_token_with_special_characters() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "user@domain.com".to_string(),
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0".to_string(),
@@ -299,13 +269,10 @@ async fn test_postgres_token_with_long_values() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "t".repeat(2000),
@@ -326,13 +293,10 @@ async fn test_postgres_save_get_update_remove_flow() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock)
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock).build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(1000);
+    let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
@@ -343,7 +307,7 @@ async fn test_postgres_save_get_update_remove_flow() {
 
     store.save_token(token_data).await.unwrap();
 
-    let new_expires_at = initial_time + Duration::seconds(2000);
+    let new_expires_at = initial_time + TimeDelta::seconds(2000);
     let updated_data = TokenData {
         identifier: "user1".to_string(),
         token: "token2".to_string(),
@@ -374,7 +338,7 @@ async fn test_postgres_last_accessed_timestamp_recorded() {
         .build();
     store.initialize().await.unwrap();
 
-    let expires_at = initial_time + Duration::seconds(3600);
+    let expires_at = initial_time + TimeDelta::seconds(3600);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
@@ -386,11 +350,11 @@ async fn test_postgres_last_accessed_timestamp_recorded() {
     store.save_token(token_data).await.unwrap();
 
     // Advance time and access the token
-    mock_clock.advance(Duration::seconds(100));
+    mock_clock.advance(TimeDelta::seconds(100));
     let _retrieved = store.get_token("user1").await.unwrap();
 
     // Use mock_clock directly (not the cast version)
-    assert_eq!(mock_clock.now(), initial_time + Duration::seconds(100));
+    assert_eq!(mock_clock.now(), initial_time + TimeDelta::seconds(100));
 }
 
 #[tokio::test]
@@ -398,10 +362,7 @@ async fn test_postgres_deterministic_timestamps() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
-    let store = PostgresTokenStore::builder()
-        .pool(pool)
-        .clock(clock.clone())
-        .build();
+    let store = PostgresTokenStore::builder().pool(pool).clock(clock.clone()).build();
     store.initialize().await.unwrap();
 
     // Create multiple tokens with controlled time
@@ -409,20 +370,20 @@ async fn test_postgres_deterministic_timestamps() {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
-        expires_at: initial_time + Duration::seconds(3600),
+        expires_at: initial_time + TimeDelta::seconds(3600),
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
     store.save_token(token1).await.unwrap();
 
     // Advance time in a controlled manner
-    clock.advance(Duration::seconds(500));
+    clock.advance(TimeDelta::seconds(500));
 
     let token2 = TokenData {
         identifier: "user2".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
-        expires_at: initial_time + Duration::seconds(7200),
+        expires_at: initial_time + TimeDelta::seconds(7200),
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 

@@ -11,10 +11,10 @@
 //
 
 use crate::lock::{LockError, LockManager};
-use crate::util::{Clock, default_clock};
+use crate::util::{default_clock, Clock};
 use async_trait::async_trait;
 use bon::Builder;
-use chrono::Duration as ChronoDuration;
+use chrono::TimeDelta;
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -100,8 +100,8 @@ pub struct PostgresLockManager {
     /// Lock timeout duration. Expired locks are automatically cleaned up.
     ///
     /// Defaults to 30 seconds if not specified.
-    #[builder(default = ChronoDuration::seconds(30))]
-    timeout: ChronoDuration,
+    #[builder(default = TimeDelta::seconds(30))]
+    timeout: TimeDelta,
 
     /// Clock for time operations. Defaults to the system clock.
     #[builder(default = default_clock())]

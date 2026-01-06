@@ -19,7 +19,7 @@ use facet_client::lock::LockManager;
 use facet_client::util::{Clock, MockClock};
 use uuid::Uuid;
 use facet_client::lock::LockError::{LockAlreadyHeld, LockNotFound};
-use chrono::Utc;
+use chrono::{TimeDelta, Utc};
 
 #[tokio::test]
 async fn test_postgres_lock_exclusive_lock() {
@@ -196,7 +196,7 @@ async fn test_postgres_lock_cleanup_on_timeout() {
     manager.lock(&identifier, owner1).await.unwrap();
 
     // Advance time 
-    mock_clock.advance(chrono::Duration::seconds(60));
+    mock_clock.advance(TimeDelta::seconds(60));
 
     // Owner2 should be able to acquire the lock (expired one should be cleaned up)
     let result = manager.lock(&identifier, owner2).await;

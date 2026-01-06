@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use std::sync::{Arc, Mutex};
 
 /// Abstraction for time operations
@@ -43,7 +43,7 @@ impl MockClock {
         }
     }
 
-    pub fn advance(&self, duration: ChronoDuration) {
+    pub fn advance(&self, duration: TimeDelta) {
         let mut time = self.current_time.lock().unwrap();
         *time = *time + duration;
     }

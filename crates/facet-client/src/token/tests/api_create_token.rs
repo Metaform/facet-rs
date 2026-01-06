@@ -12,7 +12,7 @@
 
 use crate::token::tests::mocks::{MockLockManager, MockTokenClient, MockTokenStore};
 use crate::token::{TokenClientApi, TokenError};
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use mockall::predicate::eq;
 use std::sync::Arc;
 
@@ -44,7 +44,7 @@ async fn test_create_token_success() {
         .token_client(Arc::new(token_client))
         .build();
 
-    let expires_at = Utc::now() + Duration::hours(1);
+    let expires_at = Utc::now() + TimeDelta::hours(1);
     let result = token_api
         .create_token(
             "test_identifier",
@@ -65,7 +65,7 @@ async fn test_create_token_saves_correct_data() {
     lock_manager.expect_lock().once().returning(|_, _| Ok(()));
 
     let mut token_store = MockTokenStore::new();
-    let expected_expires_at = Utc::now() + Duration::hours(2);
+    let expected_expires_at = Utc::now() + TimeDelta::hours(2);
 
     token_store
         .expect_save_token()
@@ -127,7 +127,7 @@ async fn test_create_token_acquires_lock() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "service_owner",
         )
         .await;
@@ -161,7 +161,7 @@ async fn test_create_token_lock_failure() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner1",
         )
         .await;
@@ -200,7 +200,7 @@ async fn test_create_token_store_failure() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner1",
         )
         .await;
@@ -244,7 +244,7 @@ async fn test_create_token_with_different_owners() {
         .token_client(Arc::new(token_client))
         .build();
 
-    let expires_at = Utc::now() + Duration::hours(1);
+    let expires_at = Utc::now() + TimeDelta::hours(1);
 
     let result1 = token_api
         .create_token(
@@ -295,7 +295,7 @@ async fn test_create_token_with_various_expiry_times() {
             "t1",
             "r1",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner",
         )
         .await;
@@ -307,7 +307,7 @@ async fn test_create_token_with_various_expiry_times() {
             "t2",
             "r2",
             "https://example.com/refresh",
-            Utc::now() + Duration::days(1),
+            Utc::now() + TimeDelta::days(1),
             "owner",
         )
         .await;
@@ -319,7 +319,7 @@ async fn test_create_token_with_various_expiry_times() {
             "t3",
             "r3",
             "https://example.com/refresh",
-            Utc::now() + Duration::days(30),
+            Utc::now() + TimeDelta::days(30),
             "owner",
         )
         .await;
@@ -361,7 +361,7 @@ async fn test_create_token_with_special_characters() {
             jwt_like_token,
             jwt_like_token,
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner",
         )
         .await;
@@ -392,7 +392,7 @@ async fn test_create_token_does_not_call_token_client() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner",
         )
         .await;
@@ -424,7 +424,7 @@ async fn test_create_multiple_tokens_same_identifier() {
         .token_client(Arc::new(token_client))
         .build();
 
-    let expires_at = Utc::now() + Duration::hours(1);
+    let expires_at = Utc::now() + TimeDelta::hours(1);
 
     let result1 = token_api
         .create_token(
@@ -473,7 +473,14 @@ async fn test_create_token_with_empty_refresh_endpoint() {
         .build();
 
     let result = token_api
-        .create_token("test", "token", "refresh", "", Utc::now() + Duration::hours(1), "owner")
+        .create_token(
+            "test",
+            "token",
+            "refresh",
+            "",
+            Utc::now() + TimeDelta::hours(1),
+            "owner",
+        )
         .await;
 
     assert!(result.is_ok());
@@ -511,7 +518,7 @@ async fn test_create_token_with_long_identifier() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner",
         )
         .await;
@@ -525,7 +532,7 @@ async fn test_create_token_preserves_all_parameters() {
     lock_manager.expect_lock().once().returning(|_, _| Ok(()));
 
     let mut token_store = MockTokenStore::new();
-    let expected_expires_at = Utc::now() + Duration::hours(3);
+    let expected_expires_at = Utc::now() + TimeDelta::hours(3);
     let expected_endpoint = "https://custom.auth.example.com/token/refresh";
 
     token_store
@@ -587,7 +594,7 @@ async fn test_create_token_lock_error_variations() {
             "token",
             "refresh",
             "https://example.com/refresh",
-            Utc::now() + Duration::hours(1),
+            Utc::now() + TimeDelta::hours(1),
             "owner",
         )
         .await;

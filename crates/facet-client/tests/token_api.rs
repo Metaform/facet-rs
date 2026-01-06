@@ -10,12 +10,12 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use chrono::{TimeDelta, Utc};
 use facet_client::lock::mem::MemoryLockManager;
 use facet_client::token::mem::MemoryTokenStore;
 use facet_client::token::{TokenClientApi, TokenData, TokenError, TokenStore};
-use facet_client::util::{default_clock, Clock};
+use facet_client::util::{Clock, default_clock};
 use std::sync::Arc;
-use chrono::{Duration, Utc};
 
 #[tokio::test]
 async fn test_api_end_to_end() {
@@ -27,7 +27,7 @@ async fn test_api_end_to_end() {
         identifier: "test".to_string(),
         token: "token".to_string(),
         refresh_token: "refresh".to_string(),
-        expires_at: Utc::now() + Duration::seconds(10),
+        expires_at: Utc::now() + TimeDelta::seconds(10),
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
     token_store.save_token(data).await.unwrap();
@@ -57,7 +57,7 @@ async fn test_token_expiration_triggers_refresh() {
         identifier: "test".to_string(),
         token: "token".to_string(),
         refresh_token: "refresh".to_string(),
-        expires_at: initial_time + Duration::seconds(10),
+        expires_at: initial_time + TimeDelta::seconds(10),
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
     token_store.save_token(data).await.unwrap();
@@ -70,7 +70,7 @@ async fn test_token_expiration_triggers_refresh() {
         .build();
 
     // Advance time so the token is about to expire
-    clock.advance(Duration::seconds(6)); // Now + 6s, token expires at +10s, refresh threshold is 5s
+    clock.advance(TimeDelta::seconds(6)); // Now + 6s, token expires at +10s, refresh threshold is 5s
 
     let result = token_api.get_token("test", "owner1").await;
     // Should trigger refresh since (now + 5s refresh buffer) > expires_at
@@ -86,7 +86,7 @@ impl facet_client::token::TokenClient for MockTokenClient {
             identifier: "test".to_string(),
             token: "refreshed_token".to_string(),
             refresh_token: "test".to_string(),
-            expires_at: Utc::now() + Duration::seconds(10),
+            expires_at: Utc::now() + TimeDelta::seconds(10),
             refresh_endpoint: "http://example.com/renew".to_string(),
         })
     }

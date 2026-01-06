@@ -13,7 +13,7 @@
 use crate::token::tests::mocks::{MockLockManager, MockTokenClient, MockTokenStore};
 use crate::token::{TokenClientApi, TokenData, TokenError};
 use crate::util::MockClock;
-use chrono::{Duration, Utc};
+use chrono::{TimeDelta, Utc};
 use mockall::predicate::eq;
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ async fn test_get_token_not_expiring_does_not_refresh() {
             identifier: "test".to_string(),
             token: "active_token".to_string(),
             refresh_token: "refresh".to_string(),
-            expires_at: Utc::now() + Duration::seconds(60),
+            expires_at: Utc::now() + TimeDelta::seconds(60),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -76,7 +76,7 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
                 identifier: "test".to_string(),
                 token: "old_token".to_string(),
                 refresh_token: "old_refresh".to_string(),
-                expires_at: Utc::now() + Duration::seconds(10),
+                expires_at: Utc::now() + TimeDelta::seconds(10),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -97,7 +97,7 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
                 identifier: "test".to_string(),
                 token: "new_token".to_string(),
                 refresh_token: "new_refresh".to_string(),
-                expires_at: Utc::now() + Duration::seconds(3600),
+                expires_at: Utc::now() + TimeDelta::seconds(3600),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -111,7 +111,7 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
         .build();
 
     // Advance time so the token is within the 5s refresh threshold
-    clock.advance(Duration::seconds(6));
+    clock.advance(TimeDelta::seconds(6));
 
     let result = token_api.get_token("test", "owner1").await.unwrap();
     assert_eq!(result, "new_token");
@@ -142,7 +142,7 @@ async fn test_get_token_expired_triggers_refresh() {
                 identifier: "test".to_string(),
                 token: "expired_token".to_string(),
                 refresh_token: "refresh".to_string(),
-                expires_at: Utc::now() - Duration::seconds(10),
+                expires_at: Utc::now() - TimeDelta::seconds(10),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -159,7 +159,7 @@ async fn test_get_token_expired_triggers_refresh() {
             identifier: "test".to_string(),
             token: "refreshed_token".to_string(),
             refresh_token: "new_refresh".to_string(),
-            expires_at: Utc::now() + Duration::seconds(3600),
+            expires_at: Utc::now() + TimeDelta::seconds(3600),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -200,7 +200,7 @@ async fn test_refresh_updates_stored_token() {
                 identifier: "test".to_string(),
                 token: "old_token".to_string(),
                 refresh_token: "old_refresh".to_string(),
-                expires_at: Utc::now() + Duration::seconds(3),
+                expires_at: Utc::now() + TimeDelta::seconds(3),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -218,7 +218,7 @@ async fn test_refresh_updates_stored_token() {
             identifier: "test".to_string(),
             token: "refreshed_token".to_string(),
             refresh_token: "new_refresh_token".to_string(),
-            expires_at: Utc::now() + Duration::seconds(3600),
+            expires_at: Utc::now() + TimeDelta::seconds(3600),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -231,7 +231,7 @@ async fn test_refresh_updates_stored_token() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
-    clock.advance(Duration::seconds(4));
+    clock.advance(TimeDelta::seconds(4));
     let _ = token_api.get_token("test", "owner1").await.unwrap();
 }
 
@@ -253,7 +253,7 @@ async fn test_refresh_failure_returns_error() {
             identifier: "test".to_string(),
             token: "token".to_string(),
             refresh_token: "refresh".to_string(),
-            expires_at: Utc::now() + Duration::seconds(3),
+            expires_at: Utc::now() + TimeDelta::seconds(3),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -272,7 +272,7 @@ async fn test_refresh_failure_returns_error() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
-    clock.advance(Duration::seconds(4));
+    clock.advance(TimeDelta::seconds(4));
     let result = token_api.get_token("test", "owner1").await;
     assert!(result.is_err());
 }
@@ -302,7 +302,7 @@ async fn test_lock_acquired_during_refresh() {
                 identifier: "test".to_string(),
                 token: "token".to_string(),
                 refresh_token: "refresh".to_string(),
-                expires_at: Utc::now() + Duration::seconds(3),
+                expires_at: Utc::now() + TimeDelta::seconds(3),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -319,7 +319,7 @@ async fn test_lock_acquired_during_refresh() {
             identifier: "test".to_string(),
             token: "refreshed".to_string(),
             refresh_token: "new_refresh".to_string(),
-            expires_at: Utc::now() + Duration::seconds(3600),
+            expires_at: Utc::now() + TimeDelta::seconds(3600),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -332,7 +332,7 @@ async fn test_lock_acquired_during_refresh() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
-    clock.advance(Duration::seconds(4));
+    clock.advance(TimeDelta::seconds(4));
 
     // Trigger refresh which should acquire the lock
     let _ = token_api.get_token("test", "owner1").await.unwrap();
@@ -362,7 +362,7 @@ async fn test_lock_prevents_concurrent_refresh() {
                 identifier: "test".to_string(),
                 token: "token".to_string(),
                 refresh_token: "refresh".to_string(),
-                expires_at: initial_time + Duration::seconds(3),
+                expires_at: initial_time + TimeDelta::seconds(3),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -378,7 +378,7 @@ async fn test_lock_prevents_concurrent_refresh() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
-    clock.advance(Duration::seconds(4));
+    clock.advance(TimeDelta::seconds(4));
 
     // Attempt to get token should fail (cannot acquire lock)
     let result = token_api.get_token("test", "owner1").await;
@@ -442,7 +442,7 @@ async fn test_refresh_with_custom_refresh_threshold() {
                 identifier: "test".to_string(),
                 token: "token".to_string(),
                 refresh_token: "refresh".to_string(),
-                expires_at: Utc::now() + Duration::seconds(20),
+                expires_at: Utc::now() + TimeDelta::seconds(20),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -459,7 +459,7 @@ async fn test_refresh_with_custom_refresh_threshold() {
             identifier: "test".to_string(),
             token: "refreshed".to_string(),
             refresh_token: "new_refresh".to_string(),
-            expires_at: Utc::now() + Duration::seconds(3600),
+            expires_at: Utc::now() + TimeDelta::seconds(3600),
             refresh_endpoint: "https://example.com/refresh".to_string(),
         })
     });
@@ -472,7 +472,7 @@ async fn test_refresh_with_custom_refresh_threshold() {
         .refresh_before_expiry_ms(10_000) // Refresh 10 seconds before expiry
         .build();
 
-    clock.advance(Duration::seconds(11));
+    clock.advance(TimeDelta::seconds(11));
 
     let result = token_api.get_token("test", "owner1").await.unwrap();
     assert_eq!(result, "refreshed");
@@ -502,7 +502,7 @@ async fn test_multiple_tokens_independent_refresh() {
                 identifier: "token1".to_string(),
                 token: "token1".to_string(),
                 refresh_token: "refresh1".to_string(),
-                expires_at: Utc::now() + Duration::seconds(3),
+                expires_at: Utc::now() + TimeDelta::seconds(3),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -516,7 +516,7 @@ async fn test_multiple_tokens_independent_refresh() {
                 identifier: "token2".to_string(),
                 token: "token2".to_string(),
                 refresh_token: "refresh2".to_string(),
-                expires_at: Utc::now() + Duration::seconds(100),
+                expires_at: Utc::now() + TimeDelta::seconds(100),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -537,7 +537,7 @@ async fn test_multiple_tokens_independent_refresh() {
                 identifier: "token1".to_string(),
                 token: "refreshed1".to_string(),
                 refresh_token: "new_refresh1".to_string(),
-                expires_at: Utc::now() + Duration::seconds(3600),
+                expires_at: Utc::now() + TimeDelta::seconds(3600),
                 refresh_endpoint: "https://example.com/refresh".to_string(),
             })
         });
@@ -550,7 +550,7 @@ async fn test_multiple_tokens_independent_refresh() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
-    clock.advance(Duration::seconds(4));
+    clock.advance(TimeDelta::seconds(4));
 
     // token1 should trigger refresh
     let result1 = token_api.get_token("token1", "owner1").await.unwrap();

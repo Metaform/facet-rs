@@ -1,4 +1,3 @@
-
 //  Copyright (c) 2026 Metaform Systems, Inc
 //
 //  This program and the accompanying materials are made available under the
@@ -12,12 +11,11 @@
 //
 
 use crate::lock::{LockError, LockManager};
-use crate::util::{default_clock, Clock};
+use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
 
 struct LockRecord {
@@ -46,7 +44,7 @@ struct LockRecord {
 /// ```
 pub struct MemoryLockManager {
     locks: Mutex<HashMap<String, LockRecord>>,
-    timeout: Duration,
+    timeout: TimeDelta,
     clock: Arc<dyn Clock>,
 }
 
@@ -54,13 +52,13 @@ impl MemoryLockManager {
     pub fn new() -> Self {
         Self {
             locks: Mutex::new(HashMap::new()),
-            timeout: Duration::from_secs(30),
+            timeout: TimeDelta::seconds(30),
             clock: default_clock(),
         }
     }
 
     #[cfg(test)]
-    pub fn with_timeout_and_clock(timeout: Duration, clock: Arc<dyn Clock>) -> Self {
+    pub fn with_timeout_and_clock(timeout: TimeDelta, clock: Arc<dyn Clock>) -> Self {
         Self {
             locks: Mutex::new(HashMap::new()),
             timeout,
@@ -68,13 +66,13 @@ impl MemoryLockManager {
         }
     }
 
-    fn is_expired(&self, lock: &LockRecord, timeout: Duration) -> bool {
+    fn is_expired(&self, lock: &LockRecord, timeout: TimeDelta) -> bool {
         let now = self.clock.now();
         let elapsed = now.signed_duration_since(lock.acquired_at);
-        elapsed > ChronoDuration::from_std(timeout).unwrap()
+        elapsed > timeout
     }
 
-    fn cleanup_expired_lock(&self, locks: &mut HashMap<String, LockRecord>, identifier: &str, timeout: Duration) {
+    fn cleanup_expired_lock(&self, locks: &mut HashMap<String, LockRecord>, identifier: &str, timeout: TimeDelta) {
         if let Some(lock) = locks.get(identifier) {
             if self.is_expired(lock, timeout) {
                 locks.remove(identifier);
@@ -188,10 +186,10 @@ mod tests {
         assert!(result.is_err());
 
         if let Err(LockError::WrongOwner {
-                       identifier,
-                       existing_owner,
-                       owner,
-                   }) = result
+            identifier,
+            existing_owner,
+            owner,
+        }) = result
         {
             assert_eq!(identifier, "resource1");
             assert_eq!(existing_owner, "owner1");
@@ -242,15 +240,13 @@ mod tests {
     async fn test_lock_timeout_expiration() {
         let initial_time = Utc::now();
         let clock = Arc::new(MockClock::new(initial_time));
-        let manager = MemoryLockManager::with_timeout_and_clock(
-            Duration::from_millis(20),
-            clock.clone() as Arc<dyn Clock>,
-        );
+        let manager =
+            MemoryLockManager::with_timeout_and_clock(TimeDelta::milliseconds(20), clock.clone() as Arc<dyn Clock>);
 
         manager.lock("resource1", "owner1").await.expect("Lock failed");
 
         // Advance time by 40ms to exceed the 20ms timeout
-        clock.advance(ChronoDuration::milliseconds(60));
+        clock.advance(TimeDelta::milliseconds(60));
 
         let result = manager.lock("resource1", "owner2").await;
         assert!(result.is_ok(), "Lock should be acquired after timeout expiration");
@@ -311,9 +307,7 @@ mod tests {
         manager.lock("resource", "owner1").await.expect("Lock failed");
 
         let manager_clone = manager.clone();
-        let handle = tokio::spawn(async move {
-            manager_clone.lock("resource", "owner2").await
-        });
+        let handle = tokio::spawn(async move { manager_clone.lock("resource", "owner2").await });
 
         let result = handle.await.unwrap();
         assert!(result.is_err());

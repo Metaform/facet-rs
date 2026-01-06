@@ -25,7 +25,7 @@ use crate::lock::{LockGuard, LockManager};
 use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -80,9 +80,12 @@ impl TokenClientApi {
     pub async fn get_token(&self, identifier: &str, owner: &str) -> Result<String, TokenError> {
         let data = self.token_store.get_token(identifier).await?;
 
-        let token = if self.clock.now() >= (data.expires_at - ChronoDuration::milliseconds(self.refresh_before_expiry_ms)) {
+        let token = if self.clock.now() >= (data.expires_at - TimeDelta::milliseconds(self.refresh_before_expiry_ms)) {
             // Token is expiring, refresh it
-            self.lock_manager.lock(identifier, owner).await.map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
+            self.lock_manager
+                .lock(identifier, owner)
+                .await
+                .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
 
             let guard = LockGuard {
                 lock_manager: self.lock_manager.clone(),
@@ -90,7 +93,10 @@ impl TokenClientApi {
                 owner: owner.to_string(),
             };
 
-            let refreshed_data = self.token_client.refresh_token(&data.refresh_token, &data.refresh_endpoint).await?;
+            let refreshed_data = self
+                .token_client
+                .refresh_token(&data.refresh_token, &data.refresh_endpoint)
+                .await?;
             self.token_store.update_token(refreshed_data.clone()).await?;
             drop(guard);
             refreshed_data.token
@@ -110,7 +116,10 @@ impl TokenClientApi {
         expires_at: DateTime<Utc>,
         owner: &str,
     ) -> Result<(), TokenError> {
-        self.lock_manager.lock(identifier, owner).await.map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
+        self.lock_manager
+            .lock(identifier, owner)
+            .await
+            .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
 
         let guard = LockGuard {
             lock_manager: self.lock_manager.clone(),
@@ -162,7 +171,3 @@ pub trait TokenStore: Send + Sync {
     async fn remove_token(&self, identifier: &str) -> Result<(), TokenError>;
     async fn close(&self);
 }
-
-
-
-
