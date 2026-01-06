@@ -19,9 +19,10 @@ pub use postgres::PostgresTokenStore;
 const FIVE_SECONDS_MILLIS: i64 = 5_000;
 
 use crate::lock::{LockGuard, LockManager};
+use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
-use chrono::Utc;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -36,9 +37,6 @@ pub enum TokenError {
 
     #[error("Database error: {0}")]
     DatabaseError(String),
-
-    #[error("System time error: {0}")]
-    SystemTimeError(#[from] std::time::SystemTimeError),
 }
 
 impl TokenError {
@@ -71,17 +69,20 @@ pub struct TokenClientApi {
     token_client: Arc<dyn TokenClient>,
     #[builder(default = FIVE_SECONDS_MILLIS)]
     refresh_before_expiry_ms: i64,
+    #[builder(default = default_clock())]
+    clock: Arc<dyn Clock>,
 }
 
 impl TokenClientApi {
     pub async fn get_token(&self, identifier: &str, owner: &str) -> Result<String, TokenError> {
         let data = self.token_store.get_token(identifier).await?;
 
-        let token = if (Utc::now().timestamp_millis() + self.refresh_before_expiry_ms) > data.expires_at {
+        let token = if self.clock.now() >= (data.expires_at - ChronoDuration::milliseconds(self.refresh_before_expiry_ms)) {
             // Token is expiring, refresh it
-            self.lock_manager.lock(identifier, owner).await.map_err(|e| {
-                TokenError::database_error(format!("Failed to acquire lock: {}", e))
-            })?;
+            self.lock_manager
+                .lock(identifier, owner)
+                .await
+                .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
 
             let guard = LockGuard {
                 lock_manager: self.lock_manager.clone(),
@@ -118,7 +119,7 @@ pub struct TokenData {
     pub identifier: String,
     pub token: String,
     pub refresh_token: String,
-    pub expires_at: i64, // token expiration timestamp in milliseconds
+    pub expires_at: DateTime<Utc>,
     pub refresh_endpoint: String,
 }
 

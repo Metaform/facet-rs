@@ -1,4 +1,3 @@
-
 //  Copyright (c) 2026 Metaform Systems, Inc
 //
 //  This program and the accompanying materials are made available under the
@@ -12,9 +11,12 @@
 //
 
 use crate::token::{TokenData, TokenError, TokenStore};
+use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
+use chrono::DateTime;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 /// Postgres-backed token store using SQLx connection pooling.
 ///
@@ -29,39 +31,11 @@ use sqlx::PgPool;
 /// - **Automatic Expiration Tracking**: Tracks token expiration times and supports automatic cleanup
 ///   of stale tokens.
 /// - **Concurrent Access**: Thread-safe operations via connection pooling.
-///
-/// # Examples
-///
-/// ```ignore
-/// use sqlx::PgPool;
-/// use facet_client::token::postgres::PostgresTokenStore;
-/// use facet_client::token::{TokenStore, TokenData};
-///
-/// # #[tokio::main]
-/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// // Create a connection pool
-/// let pool = PgPool::connect("postgres://user:pass@localhost/db").await?;
-///
-/// // Initialize the token store
-/// let store = PostgresTokenStore::builder().pool(pool).build();
-/// store.initialize().await?;
-///
-/// // Save and retrieve a token
-/// let token_data = TokenData {
-///     identifier: "user1".into(),
-///     token: "access_token_value".into(),
-///     refresh_token: "refresh_token_value".into(),
-///     expires_at: 1234567890,
-///     refresh_endpoint: "https://auth.example.com/refresh".into(),
-/// };
-/// store.save_token(token_data).await?;
-/// let retrieved = store.get_token("user1").await?;
-/// # Ok(())
-/// # }
-/// ```
 #[derive(Builder)]
 pub struct PostgresTokenStore {
     pool: PgPool,
+    #[builder(default = default_clock())]
+    clock: Arc<dyn Clock>,
 }
 
 impl PostgresTokenStore {
@@ -73,37 +47,34 @@ impl PostgresTokenStore {
     ///
     /// Returns an error if the database operation fails.
     pub async fn initialize(&self) -> Result<(), TokenError> {
-        let mut tx = self.pool.begin().await.map_err(|e| {
-            TokenError::database_error(format!("Failed to begin transaction: {}", e))
-        })?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| TokenError::database_error(format!("Failed to begin transaction: {}", e)))?;
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS tokens (
                 identifier VARCHAR(255) PRIMARY KEY,
                 token TEXT NOT NULL,
                 refresh_token TEXT NOT NULL,
-                expires_at BIGINT NOT NULL,
+                expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
                 refresh_endpoint VARCHAR(2048) NOT NULL,
-                last_accessed BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
+                last_accessed TIMESTAMP WITH TIME ZONE NOT NULL
             )",
         )
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| TokenError::database_error(format!("Failed to create tokens table: {}", e)))?;
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| TokenError::database_error(format!("Failed to create tokens table: {}", e)))?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_tokens_expires_at ON tokens(expires_at)")
             .execute(&mut *tx)
             .await
             .map_err(|e| TokenError::database_error(format!("Failed to create expires_at index: {}", e)))?;
 
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tokens_last_accessed ON tokens(last_accessed)")
-            .execute(&mut *tx)
+        tx.commit()
             .await
-            .map_err(|e| TokenError::database_error(format!("Failed to create last_accessed index: {}", e)))?;
-
-        tx.commit().await.map_err(|e| {
-            TokenError::database_error(format!("Failed to commit transaction: {}", e))
-        })?;
+            .map_err(|e| TokenError::database_error(format!("Failed to commit transaction: {}", e)))?;
         Ok(())
     }
 }
@@ -111,33 +82,24 @@ impl PostgresTokenStore {
 #[async_trait]
 impl TokenStore for PostgresTokenStore {
     async fn get_token(&self, identifier: &str) -> Result<TokenData, TokenError> {
-        let mut tx = self.pool.begin().await.map_err(|e| {
-            TokenError::database_error(format!("Failed to begin transaction: {}", e))
-        })?;
-
-        let record: (String, String, String, i64, String, i64) = sqlx::query_as(
-            "SELECT identifier, token, refresh_token, expires_at, refresh_endpoint, last_accessed
+        let record: (String, String, String, DateTime<chrono::Utc>, String) = sqlx::query_as(
+            "SELECT identifier, token, refresh_token, expires_at, refresh_endpoint
              FROM tokens WHERE identifier = $1",
         )
-            .bind(identifier)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|e| TokenError::database_error(format!("Failed to fetch token: {}", e)))?
-            .ok_or_else(|| TokenError::token_not_found(identifier))?;
+        .bind(identifier)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| TokenError::database_error(format!("Failed to fetch token: {}", e)))?
+        .ok_or_else(|| TokenError::token_not_found(identifier))?;
 
-        // Update last_accessed timestamp within the same transaction
-        sqlx::query(
-            "UPDATE tokens SET last_accessed = EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
-             WHERE identifier = $1",
-        )
+        let now = self.clock.now();
+
+        sqlx::query("UPDATE tokens SET last_accessed = $2 WHERE identifier = $1")
             .bind(identifier)
-            .execute(&mut *tx)
+            .bind(now)
+            .execute(&self.pool)
             .await
             .map_err(|e| TokenError::database_error(format!("Failed to update last_accessed: {}", e)))?;
-
-        tx.commit().await.map_err(|e| {
-            TokenError::database_error(format!("Failed to commit transaction: {}", e))
-        })?;
 
         Ok(TokenData {
             identifier: record.0,
@@ -149,10 +111,7 @@ impl TokenStore for PostgresTokenStore {
     }
 
     async fn save_token(&self, data: TokenData) -> Result<(), TokenError> {
-        let now_millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(TokenError::SystemTimeError)?
-            .as_millis() as i64;
+        let now = self.clock.now();
 
         sqlx::query(
             "INSERT INTO tokens (identifier, token, refresh_token, expires_at, refresh_endpoint, last_accessed)
@@ -164,24 +123,21 @@ impl TokenStore for PostgresTokenStore {
                 refresh_endpoint = EXCLUDED.refresh_endpoint,
                 last_accessed = EXCLUDED.last_accessed",
         )
-            .bind(&data.identifier)
-            .bind(&data.token)
-            .bind(&data.refresh_token)
-            .bind(data.expires_at)
-            .bind(&data.refresh_endpoint)
-            .bind(now_millis)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| TokenError::database_error(format!("Failed to save token: {}", e)))?;
+        .bind(&data.identifier)
+        .bind(&data.token)
+        .bind(&data.refresh_token)
+        .bind(data.expires_at)
+        .bind(&data.refresh_endpoint)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TokenError::database_error(format!("Failed to save token: {}", e)))?;
 
         Ok(())
     }
 
     async fn update_token(&self, data: TokenData) -> Result<(), TokenError> {
-        let now_millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(TokenError::SystemTimeError)?
-            .as_millis() as i64;
+        let now = self.clock.now();
 
         let rows_affected = sqlx::query(
             "UPDATE tokens SET
@@ -192,16 +148,16 @@ impl TokenStore for PostgresTokenStore {
                 last_accessed = $6
              WHERE identifier = $1",
         )
-            .bind(&data.identifier)
-            .bind(&data.token)
-            .bind(&data.refresh_token)
-            .bind(data.expires_at)
-            .bind(&data.refresh_endpoint)
-            .bind(now_millis)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| TokenError::database_error(format!("Failed to update token: {}", e)))?
-            .rows_affected();
+        .bind(&data.identifier)
+        .bind(&data.token)
+        .bind(&data.refresh_token)
+        .bind(data.expires_at)
+        .bind(&data.refresh_endpoint)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TokenError::database_error(format!("Failed to update token: {}", e)))?
+        .rows_affected();
 
         if rows_affected == 0 {
             return Err(TokenError::cannot_update_non_existent(&data.identifier));

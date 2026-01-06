@@ -12,11 +12,14 @@
 
 mod common;
 
+use std::sync::Arc;
 use crate::common::setup_postgres_container;
 use facet_client::lock::postgres::PostgresLockManager;
 use facet_client::lock::LockManager;
+use facet_client::util::{Clock, MockClock};
 use uuid::Uuid;
 use facet_client::lock::LockError::{LockAlreadyHeld, LockNotFound};
+use chrono::Utc;
 
 #[tokio::test]
 async fn test_postgres_lock_exclusive_lock() {
@@ -176,23 +179,24 @@ async fn test_postgres_concurrent_lock_attempts() {
 #[tokio::test]
 async fn test_postgres_lock_cleanup_on_timeout() {
     let (pool, _container) = setup_postgres_container().await;
-    let manager = PostgresLockManager::builder().pool(pool.clone()).build();
+
+    let initial_time = Utc::now();
+    let mock_clock = Arc::new(MockClock::new(initial_time));
+    let manager = PostgresLockManager::builder()
+        .pool(pool.clone())
+        .clock(mock_clock.clone() as Arc<dyn Clock>)
+        .build();
     manager.initialize().await.unwrap();
 
     let identifier = Uuid::new_v4().to_string();
     let owner1 = "owner1";
     let owner2 = "owner2";
 
-    // Manually insert an expired lock using a timestamp from the past
-    sqlx::query(
-        "INSERT INTO distributed_locks (identifier, owner, acquired_at)
-         VALUES ($1, $2, NOW() - INTERVAL '1 hour')",
-    )
-        .bind(&identifier)
-        .bind(owner1)
-        .execute(&pool.clone())
-        .await
-        .unwrap();
+    // Save a lock and then advance the clock past the timeout
+    manager.lock(&identifier, owner1).await.unwrap();
+
+    // Advance time 
+    mock_clock.advance(chrono::Duration::seconds(60));
 
     // Owner2 should be able to acquire the lock (expired one should be cleaned up)
     let result = manager.lock(&identifier, owner2).await;
@@ -270,7 +274,7 @@ async fn test_postgres_concurrent_lock_and_unlock() {
     let identifier = Uuid::new_v4().to_string();
     let mut handles = vec![];
 
-    // Spawn 5 sequential lock/unlock cycles
+    // Spawn 5 sequential lock/unlock cycles without sleep
     for i in 0..5 {
         let manager_clone = manager.clone();
         let id_clone = identifier.clone();
@@ -279,7 +283,6 @@ async fn test_postgres_concurrent_lock_and_unlock() {
         let handle = tokio::spawn(async move {
             match manager_clone.lock(&id_clone, &owner).await {
                 Ok(_) => {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                     manager_clone.unlock(&id_clone, &owner).await
                 }
                 Err(e) => Err(e),
@@ -287,7 +290,6 @@ async fn test_postgres_concurrent_lock_and_unlock() {
         });
 
         handles.push(handle);
-        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
     }
 
     let mut success_count = 0;

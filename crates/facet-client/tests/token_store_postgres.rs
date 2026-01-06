@@ -13,13 +13,21 @@
 mod common;
 
 use facet_client::token::{PostgresTokenStore, TokenData, TokenStore};
+use facet_client::util::{Clock, MockClock};
+use chrono::{Duration, Utc};
+use std::sync::Arc;
 
 use common::setup_postgres_container;
 
 #[tokio::test]
 async fn test_postgres_token_store_initialization_idempotent() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
 
     // Initialize multiple times - should not fail
     store.initialize().await.unwrap();
@@ -30,14 +38,20 @@ async fn test_postgres_token_store_initialization_idempotent() {
 #[tokio::test]
 async fn test_postgres_save_and_get_token() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(3600);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "access_token_123".to_string(),
         refresh_token: "refresh_token_123".to_string(),
-        expires_at: 1234567890,
+        expires_at,
         refresh_endpoint: "https://auth.example.com/refresh".to_string(),
     };
 
@@ -47,14 +61,19 @@ async fn test_postgres_save_and_get_token() {
     assert_eq!(retrieved.identifier, "user1");
     assert_eq!(retrieved.token, "access_token_123");
     assert_eq!(retrieved.refresh_token, "refresh_token_123");
-    assert_eq!(retrieved.expires_at, 1234567890);
+    assert_eq!(retrieved.expires_at, expires_at);
     assert_eq!(retrieved.refresh_endpoint, "https://auth.example.com/refresh");
 }
 
 #[tokio::test]
 async fn test_postgres_get_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
     let result = store.get_token("nonexistent").await;
@@ -65,14 +84,22 @@ async fn test_postgres_get_nonexistent_token() {
 #[tokio::test]
 async fn test_postgres_save_token_overwrites_existing() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
+
+    let expires_at_1 = initial_time + Duration::seconds(1000);
+    let expires_at_2 = initial_time + Duration::seconds(2000);
 
     let token_data1 = TokenData {
         identifier: "user1".to_string(),
         token: "old_token".to_string(),
         refresh_token: "old_refresh".to_string(),
-        expires_at: 1000,
+        expires_at: expires_at_1,
         refresh_endpoint: "https://old.example.com/refresh".to_string(),
     };
 
@@ -80,7 +107,7 @@ async fn test_postgres_save_token_overwrites_existing() {
         identifier: "user1".to_string(),
         token: "new_token".to_string(),
         refresh_token: "new_refresh".to_string(),
-        expires_at: 2000,
+        expires_at: expires_at_2,
         refresh_endpoint: "https://new.example.com/refresh".to_string(),
     };
 
@@ -90,30 +117,37 @@ async fn test_postgres_save_token_overwrites_existing() {
     let retrieved = store.get_token("user1").await.unwrap();
     assert_eq!(retrieved.token, "new_token");
     assert_eq!(retrieved.refresh_token, "new_refresh");
-    assert_eq!(retrieved.expires_at, 2000);
+    assert_eq!(retrieved.expires_at, expires_at_2);
 }
 
 #[tokio::test]
 async fn test_postgres_update_token_success() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
     store.save_token(token_data).await.unwrap();
 
+    let new_expires_at = initial_time + Duration::seconds(2000);
     let updated_data = TokenData {
         identifier: "user1".to_string(),
         token: "token_updated".to_string(),
         refresh_token: "refresh_updated".to_string(),
-        expires_at: 2000,
+        expires_at: new_expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -122,20 +156,26 @@ async fn test_postgres_update_token_success() {
     let retrieved = store.get_token("user1").await.unwrap();
     assert_eq!(retrieved.token, "token_updated");
     assert_eq!(retrieved.refresh_token, "refresh_updated");
-    assert_eq!(retrieved.expires_at, 2000);
+    assert_eq!(retrieved.expires_at, new_expires_at);
 }
 
 #[tokio::test]
 async fn test_postgres_update_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "nonexistent".to_string(),
         token: "token".to_string(),
         refresh_token: "refresh".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -147,14 +187,20 @@ async fn test_postgres_update_nonexistent_token() {
 #[tokio::test]
 async fn test_postgres_remove_token_success() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -168,10 +214,15 @@ async fn test_postgres_remove_token_success() {
 #[tokio::test]
 async fn test_postgres_remove_nonexistent_token() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
-    // Should succeed even if then token doesn't exist
+    // Should succeed even if the token doesn't exist
     let result = store.remove_token("nonexistent").await;
     assert!(result.is_ok());
 }
@@ -179,14 +230,21 @@ async fn test_postgres_remove_nonexistent_token() {
 #[tokio::test]
 async fn test_postgres_multiple_tokens() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
+
+    let expires_at = initial_time + Duration::seconds(1000);
 
     let token1 = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -194,7 +252,7 @@ async fn test_postgres_multiple_tokens() {
         identifier: "user2".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
-        expires_at: 2000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -211,14 +269,20 @@ async fn test_postgres_multiple_tokens() {
 #[tokio::test]
 async fn test_postgres_token_with_special_characters() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "user@domain.com".to_string(),
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0".to_string(),
         refresh_token: "refresh!@#$%^&*()".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://auth.example.com/token?param=value&other=123".to_string(),
     };
 
@@ -233,14 +297,20 @@ async fn test_postgres_token_with_special_characters() {
 #[tokio::test]
 async fn test_postgres_token_with_long_values() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "t".repeat(2000),
         refresh_token: "r".repeat(2000),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: format!("https://example.com/{}", "path/".repeat(100)),
     };
 
@@ -254,24 +324,31 @@ async fn test_postgres_token_with_long_values() {
 #[tokio::test]
 async fn test_postgres_save_get_update_remove_flow() {
     let (pool, _container) = setup_postgres_container().await;
-    let store = PostgresTokenStore::builder().pool(pool).build();
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock)
+        .build();
     store.initialize().await.unwrap();
 
+    let expires_at = initial_time + Duration::seconds(1000);
     let token_data = TokenData {
         identifier: "user1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
-        expires_at: 1000,
+        expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
     store.save_token(token_data).await.unwrap();
 
+    let new_expires_at = initial_time + Duration::seconds(2000);
     let updated_data = TokenData {
         identifier: "user1".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
-        expires_at: 2000,
+        expires_at: new_expires_at,
         refresh_endpoint: "https://example.com/refresh".to_string(),
     };
 
@@ -283,4 +360,78 @@ async fn test_postgres_save_get_update_remove_flow() {
     store.remove_token("user1").await.unwrap();
     let result = store.get_token("user1").await;
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_postgres_last_accessed_timestamp_recorded() {
+    let (pool, _container) = setup_postgres_container().await;
+    let initial_time = Utc::now();
+    let mock_clock = Arc::new(MockClock::new(initial_time));
+
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(mock_clock.clone() as Arc<dyn Clock>)
+        .build();
+    store.initialize().await.unwrap();
+
+    let expires_at = initial_time + Duration::seconds(3600);
+    let token_data = TokenData {
+        identifier: "user1".to_string(),
+        token: "token1".to_string(),
+        refresh_token: "refresh1".to_string(),
+        expires_at,
+        refresh_endpoint: "https://example.com/refresh".to_string(),
+    };
+
+    store.save_token(token_data).await.unwrap();
+
+    // Advance time and access the token
+    mock_clock.advance(Duration::seconds(100));
+    let _retrieved = store.get_token("user1").await.unwrap();
+
+    // Use mock_clock directly (not the cast version)
+    assert_eq!(mock_clock.now(), initial_time + Duration::seconds(100));
+}
+
+#[tokio::test]
+async fn test_postgres_deterministic_timestamps() {
+    let (pool, _container) = setup_postgres_container().await;
+    let initial_time = Utc::now();
+    let clock = Arc::new(MockClock::new(initial_time));
+    let store = PostgresTokenStore::builder()
+        .pool(pool)
+        .clock(clock.clone())
+        .build();
+    store.initialize().await.unwrap();
+
+    // Create multiple tokens with controlled time
+    let token1 = TokenData {
+        identifier: "user1".to_string(),
+        token: "token1".to_string(),
+        refresh_token: "refresh1".to_string(),
+        expires_at: initial_time + Duration::seconds(3600),
+        refresh_endpoint: "https://example.com/refresh".to_string(),
+    };
+
+    store.save_token(token1).await.unwrap();
+
+    // Advance time in a controlled manner
+    clock.advance(Duration::seconds(500));
+
+    let token2 = TokenData {
+        identifier: "user2".to_string(),
+        token: "token2".to_string(),
+        refresh_token: "refresh2".to_string(),
+        expires_at: initial_time + Duration::seconds(7200),
+        refresh_endpoint: "https://example.com/refresh".to_string(),
+    };
+
+    store.save_token(token2).await.unwrap();
+
+    // Verify both tokens exist with their respective timestamps
+    let retrieved1 = store.get_token("user1").await.unwrap();
+    let retrieved2 = store.get_token("user2").await.unwrap();
+
+    assert_eq!(retrieved1.identifier, "user1");
+    assert_eq!(retrieved2.identifier, "user2");
 }

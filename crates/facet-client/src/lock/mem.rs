@@ -1,3 +1,4 @@
+
 //  Copyright (c) 2026 Metaform Systems, Inc
 //
 //  This program and the accompanying materials are made available under the
@@ -11,14 +12,17 @@
 //
 
 use crate::lock::{LockError, LockManager};
+use crate::util::{default_clock, Clock};
 use async_trait::async_trait;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 struct LockRecord {
     owner: String,
-    acquired_at: Instant,
+    acquired_at: DateTime<Utc>,
     reentrant_count: usize,
 }
 
@@ -43,6 +47,7 @@ struct LockRecord {
 pub struct MemoryLockManager {
     locks: Mutex<HashMap<String, LockRecord>>,
     timeout: Duration,
+    clock: Arc<dyn Clock>,
 }
 
 impl MemoryLockManager {
@@ -50,6 +55,7 @@ impl MemoryLockManager {
         Self {
             locks: Mutex::new(HashMap::new()),
             timeout: Duration::from_secs(30),
+            clock: default_clock(),
         }
     }
 
@@ -57,16 +63,28 @@ impl MemoryLockManager {
         Self {
             locks: Mutex::new(HashMap::new()),
             timeout,
+            clock: default_clock(),
         }
     }
 
-    fn is_expired(lock: &LockRecord, timeout: Duration) -> bool {
-        lock.acquired_at.elapsed() > timeout
+    #[cfg(test)]
+    pub fn with_timeout_and_clock(timeout: Duration, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            locks: Mutex::new(HashMap::new()),
+            timeout,
+            clock,
+        }
     }
 
-    fn cleanup_expired_lock(locks: &mut HashMap<String, LockRecord>, identifier: &str, timeout: Duration) {
+    fn is_expired(&self, lock: &LockRecord, timeout: Duration) -> bool {
+        let now = self.clock.now();
+        let elapsed = now.signed_duration_since(lock.acquired_at);
+        elapsed > ChronoDuration::from_std(timeout).unwrap()
+    }
+
+    fn cleanup_expired_lock(&self, locks: &mut HashMap<String, LockRecord>, identifier: &str, timeout: Duration) {
         if let Some(lock) = locks.get(identifier) {
-            if Self::is_expired(lock, timeout) {
+            if self.is_expired(lock, timeout) {
                 locks.remove(identifier);
             }
         }
@@ -84,7 +102,7 @@ impl LockManager for MemoryLockManager {
     async fn lock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
         let mut locks = self.locks.lock().await;
 
-        Self::cleanup_expired_lock(&mut locks, identifier, self.timeout);
+        self.cleanup_expired_lock(&mut locks, identifier, self.timeout);
 
         if let Some(existing_lock) = locks.get_mut(identifier) {
             if existing_lock.owner == owner {
@@ -99,7 +117,7 @@ impl LockManager for MemoryLockManager {
             identifier.to_string(),
             LockRecord {
                 owner: owner.to_string(),
-                acquired_at: Instant::now(),
+                acquired_at: self.clock.now(),
                 reentrant_count: 1,
             },
         );
@@ -130,7 +148,7 @@ impl LockManager for MemoryLockManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration as StdDuration;
+    use crate::util::MockClock;
 
     #[tokio::test]
     async fn test_lock_acquire_success() {
@@ -230,13 +248,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_lock_timeout_expiration() {
-        let manager = MemoryLockManager::with_timeout(StdDuration::from_millis(20));
+        let initial_time = Utc::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let manager = MemoryLockManager::with_timeout_and_clock(
+            Duration::from_millis(20),
+            clock.clone() as Arc<dyn Clock>,
+        );
+
         manager.lock("resource1", "owner1").await.expect("Lock failed");
 
-        tokio::time::sleep(StdDuration::from_millis(40)).await;
+        // Advance time by 40ms to exceed the 20ms timeout
+        clock.advance(ChronoDuration::milliseconds(60));
 
         let result = manager.lock("resource1", "owner2").await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Lock should be acquired after timeout expiration");
     }
 
     #[tokio::test]
