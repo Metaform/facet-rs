@@ -259,11 +259,11 @@ impl LockManager for PostgresLockManager {
     }
 
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
-        // Decrement the reentrant count and only delete if it reaches 0
+        // Decrement the reentrant count, but only if it's greater than 0 to prevent negative counts
         let rows_affected = sqlx::query(
             "UPDATE distributed_locks
              SET reentrant_count = reentrant_count - 1
-             WHERE identifier = $1 AND owner = $2",
+             WHERE identifier = $1 AND owner = $2 AND reentrant_count > 0",
         )
         .bind(identifier)
         .bind(owner)

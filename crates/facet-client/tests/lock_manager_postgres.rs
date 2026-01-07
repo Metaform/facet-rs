@@ -92,6 +92,77 @@ async fn test_postgres_lock_reentrant_unlock() {
 }
 
 #[tokio::test]
+async fn test_postgres_lock_concurrent_unlock_race() {
+    // This test demonstrates a race condition bug where two concurrent unlocks
+    // can both succeed even though the lock was only acquired once
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = Arc::new(PostgresLockManager::builder().pool(pool).build());
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let owner = "owner1";
+
+    // Run many iterations to increase probability of hitting the race
+    for iteration in 0..50 {
+        let id = format!("{}-{}", identifier, iteration);
+
+        // Acquire lock once (count = 1)
+        manager.lock(&id, owner).await.unwrap();
+
+        // Spawn two concurrent unlock operations
+        let manager1 = manager.clone();
+        let manager2 = manager.clone();
+        let id1 = id.clone();
+        let id2 = id.clone();
+
+        let handle1 = tokio::spawn(async move { manager1.unlock(&id1, owner).await });
+        let handle2 = tokio::spawn(async move { manager2.unlock(&id2, owner).await });
+
+        let result1 = handle1.await.unwrap();
+        let result2 = handle2.await.unwrap();
+
+        // BUG: Both unlocks might succeed even though lock was only acquired once
+        // Expected: One should succeed, the other should fail with LockNotFound
+        if result1.is_ok() && result2.is_ok() {
+            panic!(
+                "BUG DETECTED at iteration {}: Both unlocks succeeded even though lock was only acquired once! \
+                This means the reentrant_count went negative.",
+                iteration
+            );
+        }
+
+        // Clean up - ensure lock is released
+        let _ = manager.unlock(&id, owner).await;
+    }
+}
+
+#[tokio::test]
+async fn test_postgres_lock_unlock_idempotency() {
+    // Verify that unlocking a non-existent or already-released lock returns an error
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let owner = "owner1";
+
+    // Acquire and release lock
+    manager.lock(&identifier, owner).await.unwrap();
+    manager.unlock(&identifier, owner).await.unwrap();
+
+    // Second unlock should fail - lock already released
+    let result = manager.unlock(&identifier, owner).await;
+    assert!(result.is_err(), "Unlocking already-released lock should fail");
+
+    if let Err(LockNotFound { identifier: id, owner: o }) = result {
+        assert_eq!(id, identifier);
+        assert_eq!(o, owner);
+    } else {
+        panic!("Expected LockNotFound error");
+    }
+}
+
+#[tokio::test]
 async fn test_postgres_unlock_success() {
     let (pool, _container) = setup_postgres_container().await;
     let manager = PostgresLockManager::builder().pool(pool).build();
