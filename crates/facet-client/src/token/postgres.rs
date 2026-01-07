@@ -31,7 +31,32 @@ use std::sync::Arc;
 ///   multiple services or instances.
 /// - **Automatic Expiration Tracking**: Tracks token expiration times and supports automatic cleanup
 ///   of stale tokens.
+/// - **Token Encryption**: Tokens are encrypted at rest. However, encryptio key rotation is not supported.
 /// - **Concurrent Access**: Thread-safe operations via connection pooling.
+///
+/// # Setup
+///
+/// Generate the `encryption_key` at startup using `crate::util::encryption_key()`. The password and salt
+/// must be consistent across instances and restarts and should be stored securely:
+///
+/// ```no_run
+/// # use facet_client::token::PostgresTokenStore;
+/// # use sqlx::PgPool;
+///
+/// # async fn launch() -> Result<(), Box<dyn std::error::Error>> {
+/// let pool = PgPool::connect("").await?;
+/// let password = std::env::var("ENCRYPTION_PASSWORD")?;
+/// let salt_hex = std::env::var("ENCRYPTION_SALT")?;
+/// let key = facet_client::util::encryption_key(&password, &salt_hex)?;
+///
+/// let store = PostgresTokenStore::builder()
+///     .pool(pool)
+///     .encryption_key(key)
+///     .build();
+///
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Builder)]
 pub struct PostgresTokenStore {
     pool: PgPool,
@@ -86,7 +111,6 @@ impl PostgresTokenStore {
 #[async_trait]
 impl TokenStore for PostgresTokenStore {
     async fn get_token(&self, identifier: &str) -> Result<TokenData, TokenError> {
-
         let record: TokenRecord = sqlx::query_as(
             "SELECT identifier, token, token_nonce, refresh_token, refresh_token_nonce, expires_at, refresh_endpoint
              FROM tokens WHERE identifier = $1",
@@ -159,7 +183,7 @@ impl TokenStore for PostgresTokenStore {
 
         Ok(())
     }
-    
+
     async fn update_token(&self, data: TokenData) -> Result<(), TokenError> {
         // Encrypt token
         let (encrypted_token, token_nonce) = crate::util::encrypt(&self.encryption_key, data.token.as_bytes());
@@ -181,18 +205,18 @@ impl TokenStore for PostgresTokenStore {
                 last_accessed = $8
              WHERE identifier = $1",
         )
-            .bind(&data.identifier)
-            .bind(encrypted_token)
-            .bind(token_nonce.as_ref())
-            .bind(encrypted_refresh_token)
-            .bind(refresh_nonce.as_ref())
-            .bind(data.expires_at)
-            .bind(&data.refresh_endpoint)
-            .bind(now)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| TokenError::database_error(format!("Failed to update token: {}", e)))?
-            .rows_affected();
+        .bind(&data.identifier)
+        .bind(encrypted_token)
+        .bind(token_nonce.as_ref())
+        .bind(encrypted_refresh_token)
+        .bind(refresh_nonce.as_ref())
+        .bind(data.expires_at)
+        .bind(&data.refresh_endpoint)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| TokenError::database_error(format!("Failed to update token: {}", e)))?
+        .rows_affected();
 
         if rows_affected == 0 {
             return Err(TokenError::cannot_update_non_existent(&data.identifier));
@@ -215,7 +239,6 @@ impl TokenStore for PostgresTokenStore {
         self.pool.close().await;
     }
 }
-
 
 #[derive(sqlx::FromRow)]
 struct TokenRecord {
