@@ -21,7 +21,7 @@ async fn create_store_with_tokens() -> MemoryTokenStore {
 
     store
         .save_token(TokenData {
-            identifier: "user1".to_string(),
+            identifier: "provider1".to_string(),
             token: "token1".to_string(),
             refresh_token: "refresh1".to_string(),
             expires_at: expiration,
@@ -32,7 +32,7 @@ async fn create_store_with_tokens() -> MemoryTokenStore {
 
     store
         .save_token(TokenData {
-            identifier: "user2".to_string(),
+            identifier: "provider2".to_string(),
             token: "token2".to_string(),
             refresh_token: "refresh2".to_string(),
             expires_at: expiration,
@@ -43,7 +43,7 @@ async fn create_store_with_tokens() -> MemoryTokenStore {
 
     store
         .save_token(TokenData {
-            identifier: "user3".to_string(),
+            identifier: "provider3".to_string(),
             token: "token3".to_string(),
             refresh_token: "refresh3".to_string(),
             expires_at: expiration,
@@ -67,7 +67,7 @@ async fn test_save_token_success() {
     let store = MemoryTokenStore::new();
     let expiration = Utc::now() + TimeDelta::seconds(10);
     let test_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token123".to_string(),
         refresh_token: "refresh123".to_string(),
         expires_at: expiration,
@@ -77,8 +77,8 @@ async fn test_save_token_success() {
     let result = store.save_token(test_data.clone()).await;
     assert!(result.is_ok(), "save_token should return Ok");
 
-    let retrieved = store.get_token("user1").await.expect("Failed to retrieve saved token");
-    assert_eq!(retrieved.identifier, "user1", "Identifier should match");
+    let retrieved = store.get_token("provider1").await.expect("Failed to retrieve saved token");
+    assert_eq!(retrieved.identifier, "provider1", "Identifier should match");
     assert_eq!(retrieved.token, "token123", "Token should match");
     assert_eq!(retrieved.refresh_token, "refresh123", "Refresh token should match");
     assert_eq!(retrieved.expires_at, expiration, "Expiration should match");
@@ -92,9 +92,9 @@ async fn test_save_token_success() {
 async fn test_save_multiple_tokens() {
     let store = create_store_with_tokens().await;
 
-    assert_eq!(store.get_token("user1").await.unwrap().token, "token1");
-    assert_eq!(store.get_token("user2").await.unwrap().token, "token2");
-    assert_eq!(store.get_token("user3").await.unwrap().token, "token3");
+    assert_eq!(store.get_token("provider1").await.unwrap().token, "token1");
+    assert_eq!(store.get_token("provider2").await.unwrap().token, "token2");
+    assert_eq!(store.get_token("provider3").await.unwrap().token, "token3");
 }
 
 #[tokio::test]
@@ -106,7 +106,7 @@ async fn test_remove_tokens_used_before_success() {
 
     store
         .save_token(TokenData {
-            identifier: "user1".to_string(),
+            identifier: "provider1".to_string(),
             token: "token1".to_string(),
             refresh_token: "refresh1".to_string(),
             expires_at: expiration,
@@ -123,5 +123,5 @@ async fn test_remove_tokens_used_before_success() {
         .expect("Failed to remove tokens");
 
     assert_eq!(removed, 1);
-    assert!(store.get_token("user1").await.is_err());
+    assert!(store.get_token("provider1").await.is_err());
 }

@@ -56,7 +56,7 @@ async fn test_postgres_save_and_get_token() {
 
     let expires_at = initial_time + TimeDelta::seconds(3600);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "access_token_123".to_string(),
         refresh_token: "refresh_token_123".to_string(),
         expires_at,
@@ -64,9 +64,9 @@ async fn test_postgres_save_and_get_token() {
     };
 
     store.save_token(token_data.clone()).await.unwrap();
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
 
-    assert_eq!(retrieved.identifier, "user1");
+    assert_eq!(retrieved.identifier, "provider1");
     assert_eq!(retrieved.token, "access_token_123");
     assert_eq!(retrieved.refresh_token, "refresh_token_123");
     assert_eq!(retrieved.expires_at, expires_at);
@@ -106,7 +106,7 @@ async fn test_postgres_save_token_fails_on_duplicate() {
     let expires_at_2 = initial_time + TimeDelta::seconds(2000);
 
     let token_data1 = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "old_token".to_string(),
         refresh_token: "old_refresh".to_string(),
         expires_at: expires_at_1,
@@ -114,7 +114,7 @@ async fn test_postgres_save_token_fails_on_duplicate() {
     };
 
     let token_data2 = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "new_token".to_string(),
         refresh_token: "new_refresh".to_string(),
         expires_at: expires_at_2,
@@ -130,7 +130,7 @@ async fn test_postgres_save_token_fails_on_duplicate() {
     assert!(result.unwrap_err().to_string().contains("Database error"));
 
     // Verify original token is still there unchanged
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
     assert_eq!(retrieved.token, "old_token");
     assert_eq!(retrieved.refresh_token, "old_refresh");
     assert_eq!(retrieved.expires_at, expires_at_1);
@@ -150,7 +150,7 @@ async fn test_postgres_update_token_success() {
 
     let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at,
@@ -161,7 +161,7 @@ async fn test_postgres_update_token_success() {
 
     let new_expires_at = initial_time + TimeDelta::seconds(2000);
     let updated_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token_updated".to_string(),
         refresh_token: "refresh_updated".to_string(),
         expires_at: new_expires_at,
@@ -170,7 +170,7 @@ async fn test_postgres_update_token_success() {
 
     store.update_token(updated_data).await.unwrap();
 
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
     assert_eq!(retrieved.token, "token_updated");
     assert_eq!(retrieved.refresh_token, "refresh_updated");
     assert_eq!(retrieved.expires_at, new_expires_at);
@@ -216,7 +216,7 @@ async fn test_postgres_remove_token_success() {
 
     let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at,
@@ -224,9 +224,9 @@ async fn test_postgres_remove_token_success() {
     };
 
     store.save_token(token_data).await.unwrap();
-    store.remove_token("user1").await.unwrap();
+    store.remove_token("provider1").await.unwrap();
 
-    let result = store.get_token("user1").await;
+    let result = store.get_token("provider1").await;
     assert!(result.is_err());
 }
 
@@ -262,7 +262,7 @@ async fn test_postgres_multiple_tokens() {
     let expires_at = initial_time + TimeDelta::seconds(1000);
 
     let token1 = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at,
@@ -270,7 +270,7 @@ async fn test_postgres_multiple_tokens() {
     };
 
     let token2 = TokenData {
-        identifier: "user2".to_string(),
+        identifier: "provider2".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
         expires_at,
@@ -280,8 +280,8 @@ async fn test_postgres_multiple_tokens() {
     store.save_token(token1).await.unwrap();
     store.save_token(token2).await.unwrap();
 
-    let retrieved1 = store.get_token("user1").await.unwrap();
-    let retrieved2 = store.get_token("user2").await.unwrap();
+    let retrieved1 = store.get_token("provider1").await.unwrap();
+    let retrieved2 = store.get_token("provider2").await.unwrap();
 
     assert_eq!(retrieved1.token, "token1");
     assert_eq!(retrieved2.token, "token2");
@@ -301,7 +301,7 @@ async fn test_postgres_token_with_special_characters() {
 
     let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
-        identifier: "user@domain.com".to_string(),
+        identifier: "provider1".to_string(),
         token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0".to_string(),
         refresh_token: "refresh!@#$%^&*()".to_string(),
         expires_at,
@@ -309,9 +309,9 @@ async fn test_postgres_token_with_special_characters() {
     };
 
     store.save_token(token_data).await.unwrap();
-    let retrieved = store.get_token("user@domain.com").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
 
-    assert_eq!(retrieved.identifier, "user@domain.com");
+    assert_eq!(retrieved.identifier, "provider1");
     assert!(retrieved.token.contains("eyJ"));
     assert!(retrieved.refresh_token.contains("!@#$%^&*()"));
 }
@@ -330,7 +330,7 @@ async fn test_postgres_token_with_long_values() {
 
     let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "t".repeat(2000),
         refresh_token: "r".repeat(2000),
         expires_at,
@@ -338,7 +338,7 @@ async fn test_postgres_token_with_long_values() {
     };
 
     store.save_token(token_data).await.unwrap();
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
 
     assert_eq!(retrieved.token.len(), 2000);
     assert_eq!(retrieved.refresh_token.len(), 2000);
@@ -358,7 +358,7 @@ async fn test_postgres_save_get_update_remove_flow() {
 
     let expires_at = initial_time + TimeDelta::seconds(1000);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at,
@@ -369,7 +369,7 @@ async fn test_postgres_save_get_update_remove_flow() {
 
     let new_expires_at = initial_time + TimeDelta::seconds(2000);
     let updated_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
         expires_at: new_expires_at,
@@ -378,11 +378,11 @@ async fn test_postgres_save_get_update_remove_flow() {
 
     store.update_token(updated_data).await.unwrap();
 
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
     assert_eq!(retrieved.token, "token2");
 
-    store.remove_token("user1").await.unwrap();
-    let result = store.get_token("user1").await;
+    store.remove_token("provider1").await.unwrap();
+    let result = store.get_token("provider1").await;
     assert!(result.is_err());
 }
 
@@ -401,7 +401,7 @@ async fn test_postgres_last_accessed_timestamp_recorded() {
 
     let expires_at = initial_time + TimeDelta::seconds(3600);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at,
@@ -412,7 +412,7 @@ async fn test_postgres_last_accessed_timestamp_recorded() {
 
     // Advance time and access the token
     mock_clock.advance(TimeDelta::seconds(100));
-    let _retrieved = store.get_token("user1").await.unwrap();
+    let _retrieved = store.get_token("provider1").await.unwrap();
 
     // Use mock_clock directly (not the cast version)
     assert_eq!(mock_clock.now(), initial_time + TimeDelta::seconds(100));
@@ -432,7 +432,7 @@ async fn test_postgres_deterministic_timestamps() {
 
     // Create multiple tokens with controlled time
     let token1 = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "token1".to_string(),
         refresh_token: "refresh1".to_string(),
         expires_at: initial_time + TimeDelta::seconds(3600),
@@ -445,7 +445,7 @@ async fn test_postgres_deterministic_timestamps() {
     clock.advance(TimeDelta::seconds(500));
 
     let token2 = TokenData {
-        identifier: "user2".to_string(),
+        identifier: "provider2".to_string(),
         token: "token2".to_string(),
         refresh_token: "refresh2".to_string(),
         expires_at: initial_time + TimeDelta::seconds(7200),
@@ -455,11 +455,11 @@ async fn test_postgres_deterministic_timestamps() {
     store.save_token(token2).await.unwrap();
 
     // Verify both tokens exist with their respective timestamps
-    let retrieved1 = store.get_token("user1").await.unwrap();
-    let retrieved2 = store.get_token("user2").await.unwrap();
+    let retrieved1 = store.get_token("provider1").await.unwrap();
+    let retrieved2 = store.get_token("provider2").await.unwrap();
 
-    assert_eq!(retrieved1.identifier, "user1");
-    assert_eq!(retrieved2.identifier, "user2");
+    assert_eq!(retrieved1.identifier, "provider1");
+    assert_eq!(retrieved2.identifier, "provider2");
 }
 
 
@@ -477,7 +477,7 @@ async fn test_postgres_tokens_are_encrypted_at_rest() {
 
     let expires_at = initial_time + TimeDelta::seconds(3600);
     let token_data = TokenData {
-        identifier: "user1".to_string(),
+        identifier: "provider1".to_string(),
         token: "plaintext_access_token".to_string(),
         refresh_token: "plaintext_refresh_token".to_string(),
         expires_at,
@@ -490,7 +490,7 @@ async fn test_postgres_tokens_are_encrypted_at_rest() {
     let raw_record: (Vec<u8>, Vec<u8>) = sqlx::query_as(
         "SELECT token, refresh_token FROM tokens WHERE identifier = $1"
     )
-        .bind("user1")
+        .bind("provider1")
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -504,7 +504,7 @@ async fn test_postgres_tokens_are_encrypted_at_rest() {
     assert!(!raw_record.1.is_empty());
 
     // Verify we can still retrieve and decrypt properly
-    let retrieved = store.get_token("user1").await.unwrap();
+    let retrieved = store.get_token("provider1").await.unwrap();
     assert_eq!(retrieved.token, "plaintext_access_token");
     assert_eq!(retrieved.refresh_token, "plaintext_refresh_token");
 }
