@@ -144,11 +144,14 @@ impl PostgresLockManager {
             .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
         Ok(())
     }
-}
 
-#[async_trait]
-impl LockManager for PostgresLockManager {
-    async fn lock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
+    /// Internal lock acquisition with retry support for race conditions.
+    ///
+    /// When a lock is released during acquisition (between UPDATE and SELECT),
+    /// this method automatically retries up to MAX_RETRIES times.
+    async fn lock_internal(&self, identifier: &str, owner: &str, retry_count: u32) -> Result<(), LockError> {
+        const MAX_RETRIES: u32 = 5;
+
         // Wrap entire lock acquisition logic in a transaction
         let mut tx = self
             .pool
@@ -210,21 +213,45 @@ impl LockManager for PostgresLockManager {
             return Ok(());
         }
 
-        // Update failed - lock is held by different owner
-        // Fetch the actual owner for error message
-        let (existing_owner,): (String,) = sqlx::query_as(
+        // Update failed - lock is held by different owner, or was just released
+        // Fetch the actual owner for error message (may be None if lock was released)
+        let existing_owner: Option<(String,)> = sqlx::query_as(
             "SELECT owner FROM distributed_locks WHERE identifier = $1",
         )
         .bind(identifier)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to fetch lock owner: {}", e)))?;
+        .map_err(|e| LockError::database_error(format!("Failed to query lock: {}", e)))?;
 
         tx.commit()
             .await
             .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
 
-        Err(LockError::lock_already_held(identifier, &existing_owner))
+        match existing_owner {
+            Some((owner_name,)) => {
+                // Lock exists and is held by a different owner
+                Err(LockError::lock_already_held(identifier, &owner_name))
+            }
+            None => {
+                // Lock was released between UPDATE and SELECT - this is a rare race condition
+                // Retry the acquisition if we haven't exceeded the retry limit
+                if retry_count >= MAX_RETRIES {
+                    Err(LockError::internal_error(
+                        "Lock acquisition failed: exceeded retry limit due to concurrent releases",
+                    ))
+                } else {
+                    // Recursively retry (box the future to avoid infinite size)
+                    Box::pin(self.lock_internal(identifier, owner, retry_count + 1)).await
+                }
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl LockManager for PostgresLockManager {
+    async fn lock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
+        self.lock_internal(identifier, owner, 0).await
     }
 
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {

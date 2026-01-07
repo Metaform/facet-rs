@@ -411,3 +411,119 @@ async fn test_postgres_lock_reentrant_keeps_lock_alive() {
     // Verify owner1 can still re-acquire (still owns it)
     assert!(manager.lock(&identifier, owner1).await.is_ok());
 }
+
+#[tokio::test]
+async fn test_postgres_lock_race_condition_on_concurrent_release() {
+    // This test attempts to reproduce a race condition where:
+    // 1. Owner2 tries to acquire a lock held by owner1 (INSERT fails, UPDATE returns 0)
+    // 2. Owner1 releases the lock before owner2's SELECT executes
+    // 3. Owner2's SELECT finds no row and returns a confusing error
+    //
+    // This is a timing-dependent test that may not always trigger the race,
+    // but when it does, it should show a "Failed to fetch lock owner" error
+    // instead of a cleaner error message.
+
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = Arc::new(PostgresLockManager::builder().pool(pool).build());
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+
+    // Run multiple iterations to increase chances of hitting the race
+    for iteration in 0..100 {
+        let id = format!("{}-{}", identifier, iteration);
+
+        // Owner1 acquires lock
+        manager.lock(&id, "owner1").await.unwrap();
+
+        // Spawn two concurrent tasks
+        let manager2 = manager.clone();
+        let id2 = id.clone();
+        let handle_acquire = tokio::spawn(async move {
+            manager2.lock(&id2, "owner2").await
+        });
+
+        // Give a tiny bit of time for owner2 to start attempting acquisition
+        tokio::time::sleep(tokio::time::Duration::from_micros(10)).await;
+
+        // Owner1 releases the lock
+        manager.unlock(&id, "owner1").await.unwrap();
+
+        // Check the result from owner2
+        let result = handle_acquire.await.unwrap();
+
+        // The bug manifests as an error containing "Failed to fetch lock owner"
+        // when the SELECT finds no rows after the lock was released
+        if let Err(e) = &result {
+            let error_msg = e.to_string();
+            if error_msg.contains("Failed to fetch lock owner") {
+                // Found the race condition!
+                panic!("Race condition detected: {}", error_msg);
+            }
+            // Other errors are acceptable (LockAlreadyHeld is expected)
+        }
+
+        // Clean up - ensure lock is released
+        let _ = manager.unlock(&id, "owner2").await;
+    }
+}
+
+#[tokio::test]
+async fn test_postgres_lock_heavy_contention() {
+    // Stress test with heavy lock contention to potentially trigger race conditions
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = Arc::new(PostgresLockManager::builder().pool(pool).build());
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let mut handles = vec![];
+
+    // Spawn many tasks competing for the same lock
+    for i in 0..20 {
+        let manager_clone = manager.clone();
+        let id_clone = identifier.clone();
+        let owner = format!("owner{}", i % 3); // 3 owners competing
+
+        let handle = tokio::spawn(async move {
+            let mut errors = Vec::new();
+            for _ in 0..10 {
+                // Try to acquire
+                match manager_clone.lock(&id_clone, &owner).await {
+                    Ok(_) => {
+                        // Hold briefly
+                        tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+                        // Release
+                        let _ = manager_clone.unlock(&id_clone, &owner).await;
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        // Check for the race condition error
+                        if error_msg.contains("Failed to fetch lock owner") {
+                            errors.push(error_msg);
+                        }
+                    }
+                }
+                // Small delay between attempts
+                tokio::time::sleep(tokio::time::Duration::from_micros(50)).await;
+            }
+            errors
+        });
+
+        handles.push(handle);
+    }
+
+    // Collect results
+    let mut all_race_errors = Vec::new();
+    for handle in handles {
+        let errors = handle.await.unwrap();
+        all_race_errors.extend(errors);
+    }
+
+    // If we detected the race condition, fail the test to demonstrate the bug
+    if !all_race_errors.is_empty() {
+        panic!("Race condition detected in {} cases:\n{}",
+            all_race_errors.len(),
+            all_race_errors.join("\n")
+        );
+    }
+}
