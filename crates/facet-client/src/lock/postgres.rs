@@ -259,6 +259,13 @@ impl LockManager for PostgresLockManager {
     }
 
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
+        // Wrap unlock operations in a transaction to ensure atomicity
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| LockError::database_error(format!("Failed to begin transaction: {}", e)))?;
+
         // Decrement the reentrant count, but only if it's greater than 0 to prevent negative counts
         let rows_affected = sqlx::query(
             "UPDATE distributed_locks
@@ -267,7 +274,7 @@ impl LockManager for PostgresLockManager {
         )
         .bind(identifier)
         .bind(owner)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| LockError::database_error(format!("Failed to update lock count: {}", e)))?
         .rows_affected();
@@ -283,9 +290,13 @@ impl LockManager for PostgresLockManager {
         )
         .bind(identifier)
         .bind(owner)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| LockError::database_error(format!("Failed to delete lock: {}", e)))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
 
         Ok(())
     }
