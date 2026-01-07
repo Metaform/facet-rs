@@ -96,7 +96,9 @@ impl LockManager for MemoryLockManager {
 
         if let Some(existing_lock) = locks.get_mut(identifier) {
             if existing_lock.owner == owner {
+                // Reentrant lock: increment count and refresh timestamp to keep lock alive
                 existing_lock.reentrant_count += 1;
+                existing_lock.acquired_at = self.clock.now();
                 return Ok(());
             }
 
@@ -311,5 +313,77 @@ mod tests {
 
         let result = handle.await.unwrap();
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_reentrant_lock_refreshes_timestamp() {
+        // This test verifies that reentrant locks refresh the timestamp
+        let initial_time = Utc::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let manager = MemoryLockManager::with_timeout_and_clock(
+            TimeDelta::seconds(30),
+            clock.clone() as Arc<dyn Clock>,
+        );
+
+        // T=0: Owner1 acquires lock
+        manager.lock("resource", "owner1").await.expect("Lock failed");
+
+        // T=25: Advance time by 25 seconds (within 30s timeout)
+        clock.advance(TimeDelta::seconds(25));
+
+        // T=25: Owner1 re-acquires lock (reentrant) - should refresh timestamp to T=25
+        manager.lock("resource", "owner1").await.expect("Reentrant lock failed");
+
+        // T=35: Advance time by another 10 seconds (total 35 seconds from T=0, but only 10 from T=25)
+        clock.advance(TimeDelta::seconds(10));
+
+        // T=35: Owner2 tries to acquire the lock
+        // Without the fix: Lock would have expired at T=30 (T=0 + 30s), owner2 would acquire it
+        // With the fix: Lock was refreshed at T=25, expires at T=55, so still held by owner1
+        let result = manager.lock("resource", "owner2").await;
+
+        // With the fix applied, lock should still be held by owner1
+        assert!(result.is_err(), "Lock should still be held by owner1 due to timestamp refresh at T=25");
+        if let Err(LockError::LockAlreadyHeld { identifier, owner }) = result {
+            assert_eq!(identifier, "resource");
+            assert_eq!(owner, "owner1");
+        } else {
+            panic!("Expected LockAlreadyHeld error");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reentrant_lock_should_keep_lock_alive() {
+        // This test shows the expected behavior: reentrant locks should refresh timestamp
+        let initial_time = Utc::now();
+        let clock = Arc::new(MockClock::new(initial_time));
+        let manager = MemoryLockManager::with_timeout_and_clock(
+            TimeDelta::seconds(30),
+            clock.clone() as Arc<dyn Clock>,
+        );
+
+        // T=0: Owner1 acquires lock
+        manager.lock("resource", "owner1").await.expect("Lock failed");
+
+        // T=25: Advance time by 25 seconds
+        clock.advance(TimeDelta::seconds(25));
+
+        // T=25: Owner1 re-acquires lock (reentrant) - should refresh timestamp to T=25
+        manager.lock("resource", "owner1").await.expect("Reentrant lock failed");
+
+        // T=45: Advance time by another 20 seconds (total 45s from T=0, but only 20s from T=25)
+        clock.advance(TimeDelta::seconds(20));
+
+        // T=45: Owner2 tries to acquire the lock
+        // Should FAIL because timestamp was refreshed at T=25, lock expires at T=55, current is T=45
+        let result = manager.lock("resource", "owner2").await;
+
+        assert!(result.is_err(), "Lock should still be held by owner1 after timestamp refresh");
+        if let Err(LockError::LockAlreadyHeld { identifier, owner }) = result {
+            assert_eq!(identifier, "resource");
+            assert_eq!(owner, "owner1");
+        } else {
+            panic!("Expected LockAlreadyHeld error");
+        }
     }
 }
