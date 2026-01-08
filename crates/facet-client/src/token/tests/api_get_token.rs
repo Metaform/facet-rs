@@ -73,7 +73,7 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
 
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .in_sequence(&mut seq)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
@@ -141,7 +141,7 @@ async fn test_get_token_expired_triggers_refresh() {
 
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .in_sequence(&mut seq)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
@@ -201,7 +201,7 @@ async fn test_refresh_updates_stored_token() {
 
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .in_sequence(&mut seq)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
@@ -261,7 +261,7 @@ async fn test_refresh_failure_returns_error() {
     let mut token_store = MockTokenStore::new();
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
             Ok(TokenData {
@@ -310,7 +310,7 @@ async fn test_lock_acquired_during_refresh() {
 
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .in_sequence(&mut seq)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
@@ -453,7 +453,7 @@ async fn test_refresh_with_custom_refresh_threshold() {
 
     token_store
         .expect_get_token()
-        .once()
+        .times(2)
         .in_sequence(&mut seq)
         .with(eq("participant1"), eq("test"))
         .returning(|_, _| {
@@ -517,7 +517,7 @@ async fn test_multiple_tokens_independent_refresh() {
     token_store
         .expect_get_token()
         .with(eq("participant1"), eq("token1"))
-        .times(1)
+        .times(2)
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),

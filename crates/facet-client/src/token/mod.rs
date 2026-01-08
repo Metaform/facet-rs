@@ -54,30 +54,40 @@ impl TokenClientApi {
     ) -> Result<String, TokenError> {
         let data = self.token_store.get_token(participant_context, identifier).await?;
 
+        // Check token validity
+        if self.clock.now() < (data.expires_at - TimeDelta::milliseconds(self.refresh_before_expiry_ms)) {
+            return Ok(data.token);
+        }
+
+        // Token is expiring, acquire lock for refresh
+        self.lock_manager
+            .lock(identifier, owner)
+            .await
+            .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
+
+        let guard = LockGuard {
+            lock_manager: self.lock_manager.clone(),
+            identifier: identifier.to_string(),
+            owner: owner.to_string(),
+        };
+
+        // Re-fetch token after acquiring lock (another thread may have already refreshed)
+        let data = self.token_store.get_token(participant_context, identifier).await?;
+
         let token = if self.clock.now() >= (data.expires_at - TimeDelta::milliseconds(self.refresh_before_expiry_ms)) {
-            // Token is expiring, refresh it
-            self.lock_manager
-                .lock(identifier, owner)
-                .await
-                .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
-
-            let guard = LockGuard {
-                lock_manager: self.lock_manager.clone(),
-                identifier: identifier.to_string(),
-                owner: owner.to_string(),
-            };
-
+            // Token still expired after recheck, perform refresh
             let refreshed_data = self
                 .token_client
                 .refresh_token(&data.refresh_token, &data.refresh_endpoint)
                 .await?;
             self.token_store.update_token(refreshed_data.clone()).await?;
-            drop(guard);
             refreshed_data.token
         } else {
+            // Token was already refreshed by another thread while we waited for the lock
             data.token
         };
 
+        drop(guard);
         Ok(token)
     }
 
@@ -179,4 +189,3 @@ impl TokenError {
         TokenError::DatabaseError(message.into())
     }
 }
-
