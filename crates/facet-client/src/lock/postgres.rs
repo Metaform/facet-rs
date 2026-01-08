@@ -114,7 +114,7 @@ pub struct PostgresLockManager {
 impl PostgresLockManager {
     /// Initializes the distributed locks table.
     ///
-    /// Creates the `distributed_locks` table if it doesn't already exist.
+    /// Creates the `distributed_locks` table if it does not already exist.
     ///
     /// # Errors
     ///

@@ -257,19 +257,24 @@ impl TokenStore for PostgresTokenStore {
         .rows_affected();
 
         if rows_affected == 0 {
-            return Err(TokenError::cannot_update_non_existent(&data.identifier));
+            return Err(TokenError::token_not_found(&data.identifier));
         }
 
         Ok(())
     }
 
     async fn remove_token(&self, participant_context: &str, identifier: &str) -> Result<(), TokenError> {
-        sqlx::query("DELETE FROM tokens WHERE participant_context = $1 AND identifier = $2")
+        let rows_affected = sqlx::query("DELETE FROM tokens WHERE participant_context = $1 AND identifier = $2")
             .bind(participant_context)
             .bind(identifier)
             .execute(&self.pool)
             .await
-            .map_err(|e| TokenError::database_error(format!("Failed to remove token: {}", e)))?;
+            .map_err(|e| TokenError::database_error(format!("Failed to remove token: {}", e)))?
+            .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(TokenError::token_not_found(identifier));
+        }
 
         Ok(())
     }

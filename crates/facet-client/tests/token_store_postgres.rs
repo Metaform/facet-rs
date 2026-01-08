@@ -14,7 +14,7 @@ mod common;
 
 use chrono::{TimeDelta, Utc};
 use common::setup_postgres_container;
-use facet_client::token::{PostgresTokenStore, TokenData, TokenStore};
+use facet_client::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
 use facet_client::util::{Clock, MockClock, encryption_key};
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
@@ -204,7 +204,7 @@ async fn test_postgres_update_nonexistent_token() {
 
     let result = store.update_token(token_data).await;
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("non-existent"));
+    assert!(matches!(result.unwrap_err(), TokenError::TokenNotFound { .. }));
 }
 
 #[tokio::test]
@@ -248,9 +248,10 @@ async fn test_postgres_remove_nonexistent_token() {
         .build();
     store.initialize().await.unwrap();
 
-    // Should succeed even if the token doesn't exist
+    // Should fail if the token does not exist
     let result = store.remove_token("participant1", "nonexistent").await;
-    assert!(result.is_ok());
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), TokenError::TokenNotFound { .. }));
 }
 
 #[tokio::test]
@@ -523,7 +524,6 @@ async fn test_postgres_tokens_are_encrypted_at_rest() {
     assert_eq!(retrieved.refresh_token, "plaintext_refresh_token");
 }
 
-
 #[tokio::test]
 async fn test_context_isolation_save() {
     let (pool, _container) = setup_postgres_container().await;
@@ -683,7 +683,7 @@ async fn test_context_isolation_update() {
 
     let result_p3 = store.update_token(update_p3).await;
     assert!(result_p3.is_err());
-    assert!(result_p3.unwrap_err().to_string().contains("non-existent"));
+    assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 }
 
 #[tokio::test]
@@ -731,9 +731,10 @@ async fn test_context_isolation_remove() {
 
     // Verify participant3 cannot remove a token they don't own
     let result_p3 = store.remove_token("participant3", "provider").await;
-    assert!(result_p3.is_ok()); // Remove is idempotent
+    assert!(result_p3.is_err()); // Should fail - token does not exist for participant3
+    assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 
-    // Verify p2's token still exists after p3 tries to remove it
+    // Verify p2's token still exists after p3 tries to remove a non-existent token
     assert_eq!(
         store.get_token("participant2", "provider").await.unwrap().token,
         "token_p2"

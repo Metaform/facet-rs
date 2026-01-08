@@ -220,7 +220,7 @@ async fn test_postgres_unlock_nonexistent_lock() {
     let identifier = Uuid::new_v4().to_string();
     let owner = "owner1";
 
-    // Try to unlock a lock that doesn't exist
+    // Try to unlock a lock that does not exist
     let result = manager.unlock(&identifier, owner).await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("No lock found"));

@@ -152,10 +152,43 @@ pub struct TokenData {
 /// expiration times. The storage backend (in-memory, database, etc.) is implementation-dependent.
 #[async_trait]
 pub trait TokenStore: Send + Sync {
+    /// Retrieves a token by participant context and identifier.
+    ///
+    /// # Arguments
+    /// * `participant_context` - Participant identifier for isolation
+    /// * `identifier` - Token identifier
+    ///
+    /// # Errors
+    /// Returns `TokenError::TokenNotFound` if the token does not exist, or database/decryption errors.
     async fn get_token(&self, participant_context: &str, identifier: &str) -> Result<TokenData, TokenError>;
+
+    /// Saves or updates a token.
+    ///
+    /// # Arguments
+    /// * `data` - Token data to persist
+    ///
+    /// # Errors
+    /// Returns database operation errors.
     async fn save_token(&self, data: TokenData) -> Result<(), TokenError>;
+
+    /// Updates a token.
+    ///
+    /// # Arguments
+    /// * `data` - Token data to persist
+    ///
+    /// # Errors
+    /// Returns database operation errors.
     async fn update_token(&self, data: TokenData) -> Result<(), TokenError>;
+    
+    /// Deletes a token.
+    ///
+    /// # Arguments
+    /// * `participant_context` - Participant identifier for isolation
+    /// * `identifier` - Token identifier
+    /// Returns `TokenError::TokenNotFound` if the token does not exist, or database/decryption errors.
     async fn remove_token(&self, participant_context: &str, identifier: &str) -> Result<(), TokenError>;
+
+    /// Closes any resources held by the store.
     async fn close(&self);
 }
 
@@ -165,9 +198,6 @@ pub enum TokenError {
     #[error("Token not found for identifier: {identifier}")]
     TokenNotFound { identifier: String },
 
-    #[error("Cannot update non-existent token '{identifier}'")]
-    CannotUpdateNonExistent { identifier: String },
-
     #[error("Database error: {0}")]
     DatabaseError(String),
 }
@@ -175,12 +205,6 @@ pub enum TokenError {
 impl TokenError {
     pub fn token_not_found(identifier: impl Into<String>) -> Self {
         TokenError::TokenNotFound {
-            identifier: identifier.into(),
-        }
-    }
-
-    pub fn cannot_update_non_existent(identifier: impl Into<String>) -> Self {
-        TokenError::CannotUpdateNonExistent {
             identifier: identifier.into(),
         }
     }

@@ -121,7 +121,7 @@ impl TokenStore for MemoryTokenStore {
         let key = (data.participant_context.clone(), data.identifier.clone());
 
         if !tokens.contains_key(&key) {
-            return Err(TokenError::cannot_update_non_existent(&data.identifier));
+            return Err(TokenError::token_not_found(&data.identifier));
         }
 
         let now = self.clock.now();
@@ -139,7 +139,7 @@ impl TokenStore for MemoryTokenStore {
     async fn remove_token(&self, participant_context: &str, identifier: &str) -> Result<(), TokenError> {
         let mut tokens = self.tokens.write().await;
         let key = (participant_context.to_string(), identifier.to_string());
-        tokens.remove(&key);
+        tokens.remove(&key).ok_or_else(|| TokenError::token_not_found(identifier))?;
         Ok(())
     }
     

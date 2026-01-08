@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::token::{MemoryTokenStore, TokenData, TokenStore};
+use crate::token::{MemoryTokenStore, TokenData, TokenError, TokenStore};
 use crate::util::{Clock, MockClock};
 use chrono::{TimeDelta, Utc};
 use std::sync::Arc;
@@ -314,7 +314,7 @@ async fn test_context_isolation_update() {
 
     let result_p3 = store.update_token(update_p3).await;
     assert!(result_p3.is_err());
-    assert!(result_p3.unwrap_err().to_string().contains("non-existent"));
+    assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 }
 
 #[tokio::test]
@@ -353,9 +353,10 @@ async fn test_context_isolation_remove() {
 
     // Verify participant3 cannot remove a token they don't own
     let result_p3 = store.remove_token("participant3", "provider").await;
-    assert!(result_p3.is_ok()); // Remove is idempotent
+    assert!(result_p3.is_err()); // Should fail - token does not exist for participant3
+    assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 
-    // Verify p2's token still exists after p3 tries to remove it
+    // Verify p2's token still exists after p3 tries to remove a non-existent token
     assert_eq!(
         store.get_token("participant2", "provider").await.unwrap().token,
         "token_p2"
