@@ -92,7 +92,7 @@ async fn test_postgres_get_nonexistent_token() {
 }
 
 #[tokio::test]
-async fn test_postgres_save_token_fails_on_duplicate() {
+async fn test_postgres_save_token_upserts_on_duplicate() {
     let (pool, _container) = setup_postgres_container().await;
     let initial_time = Utc::now();
     let clock = Arc::new(MockClock::new(initial_time));
@@ -127,16 +127,15 @@ async fn test_postgres_save_token_fails_on_duplicate() {
     // First save succeeds
     store.save_token(token_data1).await.unwrap();
 
-    // Second save with same identifier should fail
-    let result = store.save_token(token_data2).await;
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Database error"));
+    // Second save with same identifier should succeed and update
+    store.save_token(token_data2).await.unwrap();
 
-    // Verify the original token is still there unchanged
+    // Verify the token was updated to new values
     let retrieved = store.get_token("participant1", "provider1").await.unwrap();
-    assert_eq!(retrieved.token, "old_token");
-    assert_eq!(retrieved.refresh_token, "old_refresh");
-    assert_eq!(retrieved.expires_at, expires_at_1);
+    assert_eq!(retrieved.token, "new_token");
+    assert_eq!(retrieved.refresh_token, "new_refresh");
+    assert_eq!(retrieved.expires_at, expires_at_2);
+    assert_eq!(retrieved.refresh_endpoint, "https://new.example.com/refresh");
 }
 
 #[tokio::test]

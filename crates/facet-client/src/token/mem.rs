@@ -146,5 +146,3 @@ impl TokenStore for MemoryTokenStore {
     async fn close(&self) {}
 }
 
-#[cfg(test)]
-mod tests {}

@@ -114,6 +114,45 @@ async fn test_save_multiple_tokens() {
 }
 
 #[tokio::test]
+async fn test_save_token_upserts_on_duplicate() {
+    let store = MemoryTokenStore::new();
+    let initial_time = Utc::now();
+    let expires_at_1 = initial_time + TimeDelta::seconds(1000);
+    let expires_at_2 = initial_time + TimeDelta::seconds(2000);
+
+    let token_data1 = TokenData {
+        participant_context: "participant1".to_string(),
+        identifier: "provider1".to_string(),
+        token: "old_token".to_string(),
+        refresh_token: "old_refresh".to_string(),
+        expires_at: expires_at_1,
+        refresh_endpoint: "https://old.example.com/refresh".to_string(),
+    };
+
+    let token_data2 = TokenData {
+        participant_context: "participant1".to_string(),
+        identifier: "provider1".to_string(),
+        token: "new_token".to_string(),
+        refresh_token: "new_refresh".to_string(),
+        expires_at: expires_at_2,
+        refresh_endpoint: "https://new.example.com/refresh".to_string(),
+    };
+
+    // First save succeeds
+    store.save_token(token_data1).await.unwrap();
+
+    // Second save with same identifier should succeed and update
+    store.save_token(token_data2).await.unwrap();
+
+    // Verify the token was updated to new values
+    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    assert_eq!(retrieved.token, "new_token");
+    assert_eq!(retrieved.refresh_token, "new_refresh");
+    assert_eq!(retrieved.expires_at, expires_at_2);
+    assert_eq!(retrieved.refresh_endpoint, "https://new.example.com/refresh");
+}
+
+#[tokio::test]
 async fn test_remove_tokens_used_before_success() {
     let initial = Utc::now();
     let clock = Arc::new(MockClock::new(initial));

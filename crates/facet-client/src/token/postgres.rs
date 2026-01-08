@@ -31,7 +31,7 @@ use std::sync::Arc;
 ///   multiple services or instances.
 /// - **Automatic Expiration Tracking**: Tracks token expiration times and supports automatic cleanup
 ///   of stale tokens.
-/// - **Token Encryption**: Tokens are encrypted at rest. However, encryptio key rotation is not supported.
+/// - **Token Encryption**: Tokens are encrypted at rest. However, encryption key rotation is not supported.
 /// - **Multitenancy Support**: Tokens are isolated by participant context, ensuring tenant data separation.
 /// - **Concurrent Access**: Thread-safe operations via connection pooling.
 ///
@@ -194,7 +194,16 @@ impl TokenStore for PostgresTokenStore {
 
         sqlx::query(
             "INSERT INTO tokens (participant_context, identifier, token, token_nonce, refresh_token, refresh_token_nonce, expires_at, refresh_endpoint, last_accessed)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (participant_context, identifier)
+             DO UPDATE SET
+                token = EXCLUDED.token,
+                token_nonce = EXCLUDED.token_nonce,
+                refresh_token = EXCLUDED.refresh_token,
+                refresh_token_nonce = EXCLUDED.refresh_token_nonce,
+                expires_at = EXCLUDED.expires_at,
+                refresh_endpoint = EXCLUDED.refresh_endpoint,
+                last_accessed = EXCLUDED.last_accessed",
         )
             .bind(&data.participant_context)
             .bind(&data.identifier)
