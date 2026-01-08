@@ -39,7 +39,7 @@ pub trait LockManager: Send + Sync {
     /// Returns LockAlreadyHeld if the lock is held by another owner.
     async fn lock(&self, identifier: &str, owner: &str) -> Result<(), LockError>;
 
-    /// Unlocks a resource for the owner.
+    /// Unlocks a resource held by the owner.
     ///
     /// # Arguments
     /// * `identifier` - Resource identifier
