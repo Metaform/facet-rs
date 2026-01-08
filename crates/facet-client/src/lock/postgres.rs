@@ -297,7 +297,7 @@ impl LockManager for PostgresLockManager {
             };
         }
 
-        // Delete the lock if count reaches 0
+        // Delete the lock if the count reaches 0
         sqlx::query(
             "DELETE FROM distributed_locks
              WHERE identifier = $1 AND owner = $2 AND reentrant_count <= 0",
