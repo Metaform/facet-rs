@@ -50,7 +50,7 @@ pub trait LockManager: Send + Sync {
     /// the owner, i.e. it has been released or expired
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError>;
 
-    /// Releases all locks held by the owner.
+    /// Releases all locks held by the owner. Returns normally if no locks are held.
     ///
     /// # Arguments
     /// * `owner` - Owner identifier
@@ -190,4 +190,3 @@ impl LockError {
         LockError::InternalError(message.into())
     }
 }
-
