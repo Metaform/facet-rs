@@ -100,7 +100,10 @@ pub struct PostgresLockManager {
 impl PostgresLockManager {
     /// Initializes the distributed locks table.
     ///
-    /// Creates the `distributed_locks` table if it does not already exist.
+    /// Creates the `distributed_locks` table if it does not already exist, along with
+    /// indexes to optimize lock operations:
+    /// - `idx_distributed_locks_acquired_at`: For efficient cleanup of expired locks
+    /// - `idx_distributed_locks_identifier_owner`: For efficient reentrant lock checks and unlock operations
     ///
     /// # Errors
     ///
@@ -128,6 +131,11 @@ impl PostgresLockManager {
             .execute(&mut *tx)
             .await
             .map_err(|e| LockError::store_error(format!("Failed to create index: {}", e)))?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_distributed_locks_identifier_owner ON distributed_locks(identifier, owner)")
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| LockError::store_error(format!("Failed to create composite index: {}", e)))?;
 
         tx.commit()
             .await
