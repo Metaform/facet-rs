@@ -13,6 +13,10 @@ log = { workspace = true }
 chrono = { workspace = true }
 sodiumoxide = { workspace = true }
 hex = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["rust_crypto"] }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 testcontainers = { workspace = true }
@@ -20,3 +24,9 @@ testcontainers-modules = { workspace = true }
 mockall = { workspace = true }
 uuid = { workspace = true }
 once_cell = { workspace = true }
+ed25519-dalek = { workspace = true }
+pkcs8 = { workspace = true }
+rand = { workspace = true }
+rstest = { workspace = true }
+rsa = { workspace = true }
+wiremock = { workspace = true }

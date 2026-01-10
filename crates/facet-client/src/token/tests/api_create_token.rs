@@ -172,10 +172,10 @@ async fn test_create_token_lock_failure() {
 
     assert!(result.is_err());
     match result.unwrap_err() {
-        TokenError::DatabaseError(msg) => {
+        TokenError::GeneralError(msg) => {
             assert!(msg.contains("Failed to acquire lock"));
         }
-        _ => panic!("Expected DatabaseError"),
+        _ => panic!("Expected GeneralError"),
     }
 }
 
@@ -188,7 +188,7 @@ async fn test_create_token_store_failure() {
     token_store
         .expect_save_token()
         .once()
-        .returning(|_| Err(TokenError::database_error("Storage unavailable")));
+        .returning(|_| Err(TokenError::general_error("Storage unavailable")));
 
     let token_client = MockTokenClient::new();
 
@@ -212,10 +212,10 @@ async fn test_create_token_store_failure() {
 
     assert!(result.is_err());
     match result.unwrap_err() {
-        TokenError::DatabaseError(msg) => {
+        TokenError::GeneralError(msg) => {
             assert!(msg.contains("Storage unavailable"));
         }
-        _ => panic!("Expected DatabaseError"),
+        _ => panic!("Expected GeneralError"),
     }
 }
 
@@ -592,7 +592,7 @@ async fn test_create_token_lock_error_variations() {
     lock_manager
         .expect_lock()
         .once()
-        .returning(|_, _| Err(crate::lock::LockError::database_error("Timeout waiting for lock")));
+        .returning(|_, _| Err(crate::lock::LockError::store_error("Timeout waiting for lock")));
 
     let mut token_store = MockTokenStore::new();
     token_store.expect_save_token().never();
@@ -619,9 +619,9 @@ async fn test_create_token_lock_error_variations() {
 
     assert!(result.is_err());
     match result.unwrap_err() {
-        TokenError::DatabaseError(msg) => {
+        TokenError::GeneralError(msg) => {
             assert!(msg.contains("Failed to acquire lock"));
         }
-        _ => panic!("Expected DatabaseError"),
+        _ => panic!("Expected GeneralError"),
     }
 }

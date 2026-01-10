@@ -148,8 +148,8 @@ pub enum LockError {
         owner: String,
     },
 
-    #[error("Database error: {0}")]
-    DatabaseError(String),
+    #[error("Store error: {0}")]
+    StoreError(String),
 
     #[error("Internal lock error: {0}")]
     InternalError(String),
@@ -182,11 +182,17 @@ impl LockError {
         }
     }
 
-    pub fn database_error(message: impl Into<String>) -> Self {
-        LockError::DatabaseError(message.into())
+    pub fn store_error(message: impl Into<String>) -> Self {
+        LockError::StoreError(message.into())
     }
 
     pub fn internal_error(message: impl Into<String>) -> Self {
         LockError::InternalError(message.into())
+    }
+}
+
+impl LockError {
+    pub fn is_retriable(&self) -> bool {
+        matches!(self, Self::LockAlreadyHeld { .. } | Self::StoreError(_))
     }
 }

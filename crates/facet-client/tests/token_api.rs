@@ -10,6 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use async_trait::async_trait;
 use chrono::{TimeDelta, Utc};
 use facet_client::lock::mem::MemoryLockManager;
 use facet_client::token::mem::MemoryTokenStore;
@@ -72,7 +73,7 @@ async fn test_token_expiration_triggers_refresh() {
         .build();
 
     // Advance time so the token is about to expire
-    clock.advance(TimeDelta::seconds(6)); // Now + 6s, token expires at +10s, refresh threshold is 5s
+    clock.advance(TimeDelta::seconds(6)); // Now + 6s, token expires at +10s, the refresh threshold is 5s
 
     let result = token_api.get_token("participant1", "test", "owner1").await;
     // Should trigger refresh since (now + 5s refresh buffer) > expires_at
@@ -81,9 +82,15 @@ async fn test_token_expiration_triggers_refresh() {
 
 struct MockTokenClient {}
 
-#[async_trait::async_trait]
+#[async_trait]
 impl facet_client::token::TokenClient for MockTokenClient {
-    async fn refresh_token(&self, _refresh_token: &str, _refresh_endpoint: &str) -> Result<TokenData, TokenError> {
+    async fn refresh_token(
+        &self,
+        _participant_context: &str,
+        _endpoint_identifier: &str,
+        _refresh_token: &str,
+        _refresh_endpoint: &str,
+    ) -> Result<TokenData, TokenError> {
         Ok(TokenData {
             participant_context: "participant1".to_string(),
             identifier: "test".to_string(),

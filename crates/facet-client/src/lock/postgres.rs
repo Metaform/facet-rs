@@ -124,7 +124,7 @@ impl PostgresLockManager {
             .pool
             .begin()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to begin transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to begin transaction: {}", e)))?;
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS distributed_locks (
@@ -136,16 +136,16 @@ impl PostgresLockManager {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to create locks table: {}", e)))?;
+        .map_err(|e| LockError::store_error(format!("Failed to create locks table: {}", e)))?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_distributed_locks_acquired_at ON distributed_locks(acquired_at)")
             .execute(&mut *tx)
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to create index: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to create index: {}", e)))?;
 
         tx.commit()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to commit transaction: {}", e)))?;
         Ok(())
     }
 
@@ -161,7 +161,7 @@ impl PostgresLockManager {
             .pool
             .begin()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to begin transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to begin transaction: {}", e)))?;
 
         let now = self.clock.now();
         let cutoff_time = now - self.timeout;
@@ -171,7 +171,7 @@ impl PostgresLockManager {
             .bind(cutoff_time)
             .execute(&mut *tx)
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to cleanup expired locks: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to cleanup expired locks: {}", e)))?;
 
         // Try to insert the lock with the acquired timestamp and initial count of 1
         let result = sqlx::query(
@@ -184,14 +184,14 @@ impl PostgresLockManager {
         .bind(now)
         .execute(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to insert lock: {}", e)))?;
+        .map_err(|e| LockError::store_error(format!("Failed to insert lock: {}", e)))?;
 
         // Check if insert succeeded
         if result.rows_affected() > 0 {
             // Lock acquired successfully
             tx.commit()
                 .await
-                .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
+                .map_err(|e| LockError::store_error(format!("Failed to commit transaction: {}", e)))?;
             return Ok(());
         }
 
@@ -207,13 +207,13 @@ impl PostgresLockManager {
         .bind(owner)
         .execute(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to update lock: {}", e)))?;
+        .map_err(|e| LockError::store_error(format!("Failed to update lock: {}", e)))?;
 
         if update_result.rows_affected() > 0 {
             // Successfully updated timestamp and count - reentrant lock by same owner
             tx.commit()
                 .await
-                .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
+                .map_err(|e| LockError::store_error(format!("Failed to commit transaction: {}", e)))?;
             return Ok(());
         }
 
@@ -225,11 +225,11 @@ impl PostgresLockManager {
         .bind(identifier)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to query lock: {}", e)))?;
+        .map_err(|e| LockError::store_error(format!("Failed to query lock: {}", e)))?;
 
         tx.commit()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to commit transaction: {}", e)))?;
 
         match existing_owner {
             Some((owner_name,)) => {
@@ -264,7 +264,7 @@ impl LockManager for PostgresLockManager {
             .pool
             .begin()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to begin transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to begin transaction: {}", e)))?;
 
         // Decrement the reentrant count, but only if it's greater than 0 to prevent negative counts
         let rows_affected = sqlx::query(
@@ -276,7 +276,7 @@ impl LockManager for PostgresLockManager {
         .bind(owner)
         .execute(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to update lock count: {}", e)))?
+        .map_err(|e| LockError::store_error(format!("Failed to update lock count: {}", e)))?
         .rows_affected();
 
         if rows_affected == 0 {
@@ -287,7 +287,7 @@ impl LockManager for PostgresLockManager {
             .bind(identifier)
             .fetch_optional(&mut *tx)
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to query lock: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to query lock: {}", e)))?;
 
             return match existing_owner {
                 Some((other_owner,)) if other_owner != owner => {
@@ -306,11 +306,11 @@ impl LockManager for PostgresLockManager {
         .bind(owner)
         .execute(&mut *tx)
         .await
-        .map_err(|e| LockError::database_error(format!("Failed to delete lock: {}", e)))?;
+        .map_err(|e| LockError::store_error(format!("Failed to delete lock: {}", e)))?;
 
         tx.commit()
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to commit transaction: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to commit transaction: {}", e)))?;
 
         Ok(())
     }
@@ -320,7 +320,7 @@ impl LockManager for PostgresLockManager {
             .bind(owner)
             .execute(&self.pool)
             .await
-            .map_err(|e| LockError::database_error(format!("Failed to release locks: {}", e)))?;
+            .map_err(|e| LockError::store_error(format!("Failed to release locks: {}", e)))?;
 
         Ok(())
     }

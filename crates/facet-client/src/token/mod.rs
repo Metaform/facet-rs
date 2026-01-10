@@ -10,7 +10,9 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+pub mod jwt;
 pub mod mem;
+pub mod oauth;
 pub mod postgres;
 
 #[cfg(test)]
@@ -26,6 +28,8 @@ use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::{DateTime, TimeDelta, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -63,7 +67,7 @@ impl TokenClientApi {
         self.lock_manager
             .lock(identifier, owner)
             .await
-            .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
+            .map_err(|e| TokenError::general_error(format!("Failed to acquire lock: {}", e)))?;
 
         let guard = LockGuard {
             lock_manager: self.lock_manager.clone(),
@@ -78,7 +82,12 @@ impl TokenClientApi {
             // Token still expired after recheck, perform refresh
             let refreshed_data = self
                 .token_client
-                .refresh_token(&data.refresh_token, &data.refresh_endpoint)
+                .refresh_token(
+                    participant_context,
+                    identifier,
+                    &data.refresh_token,
+                    &data.refresh_endpoint,
+                )
                 .await?;
             self.token_store.update_token(refreshed_data.clone()).await?;
             refreshed_data.token
@@ -104,7 +113,7 @@ impl TokenClientApi {
         self.lock_manager
             .lock(identifier, owner)
             .await
-            .map_err(|e| TokenError::database_error(format!("Failed to acquire lock: {}", e)))?;
+            .map_err(|e| TokenError::general_error(format!("Failed to acquire lock: {}", e)))?;
 
         let guard = LockGuard {
             lock_manager: self.lock_manager.clone(),
@@ -133,7 +142,13 @@ impl TokenClientApi {
 /// token.
 #[async_trait]
 pub trait TokenClient: Send + Sync {
-    async fn refresh_token(&self, refresh_token: &str, refresh_endpoint: &str) -> Result<TokenData, TokenError>;
+    async fn refresh_token(
+        &self,
+        participant_context: &str,
+        endpoint_identifier: &str,
+        refresh_token: &str,
+        refresh_endpoint: &str,
+    ) -> Result<TokenData, TokenError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,7 +194,7 @@ pub trait TokenStore: Send + Sync {
     /// # Errors
     /// Returns database operation errors.
     async fn update_token(&self, data: TokenData) -> Result<(), TokenError>;
-    
+
     /// Deletes a token.
     ///
     /// # Arguments
@@ -200,6 +215,15 @@ pub enum TokenError {
 
     #[error("Database error: {0}")]
     DatabaseError(String),
+
+    #[error("General token error: {0}")]
+    GeneralError(String),
+
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    #[error("Generation failed: {0}")]
+    GenerationError(#[from] JwtGenerationError), // Auto-converts jsonwebtoken errors
 }
 
 impl TokenError {
@@ -212,4 +236,58 @@ impl TokenError {
     pub fn database_error(message: impl Into<String>) -> Self {
         TokenError::DatabaseError(message.into())
     }
+
+    pub fn network_error(message: impl Into<String>) -> Self {
+        TokenError::NetworkError(message.into())
+    }
+
+    pub fn general_error(message: impl Into<String>) -> Self {
+        TokenError::GeneralError(message.into())
+    }
+}
+
+#[derive(Debug, Clone, Builder, Serialize, Deserialize)]
+pub struct TokenClaims {
+    #[builder(into)]
+    pub sub: String,
+    #[builder(into)]
+    pub iss: String,
+    #[builder(into)]
+    pub aud: String,
+    pub iat: i64,
+    pub exp: i64,
+    #[builder(default)]
+    #[serde(flatten)]
+    pub custom: Map<String, Value>,
+}
+
+pub trait JwtGenerator: Send + Sync {
+    fn generate_token(&self, participant_context: &str, claims: TokenClaims) -> Result<String, JwtGenerationError>;
+}
+
+#[derive(Debug, Error)]
+pub enum JwtGenerationError {
+    #[error("Failed to generate token: {0}")]
+    GenerationError(String),
+}
+
+/// Verifies JWT tokens and validates claims.
+pub trait JwtVerifier: Send + Sync {
+    fn verify_token(&self, participant_context: &str, token: &str) -> Result<TokenClaims, JwtVerificationError>;
+}
+
+/// Errors that can occur during JWT verification.
+#[derive(Debug, Error)]
+pub enum JwtVerificationError {
+    #[error("Invalid token signature")]
+    InvalidSignature,
+
+    #[error("Token has expired")]
+    TokenExpired,
+
+    #[error("Invalid token format")]
+    InvalidFormat,
+
+    #[error("Verification error: {0}")]
+    VerificationFailed(String),
 }
