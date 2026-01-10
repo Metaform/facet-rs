@@ -15,7 +15,7 @@ mod common;
 use chrono::{TimeDelta, Utc};
 use common::setup_postgres_container;
 use facet_client::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
-use facet_client::util::{Clock, MockClock, encryption_key};
+use facet_common::util::{encryption_key, Clock, MockClock};
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;

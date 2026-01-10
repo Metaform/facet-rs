@@ -15,7 +15,7 @@ use chrono::{TimeDelta, Utc};
 use facet_client::lock::mem::MemoryLockManager;
 use facet_client::token::mem::MemoryTokenStore;
 use facet_client::token::{TokenClientApi, TokenData, TokenError, TokenStore};
-use facet_client::util::{Clock, default_clock};
+use facet_common::util::{default_clock, Clock, MockClock};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -46,8 +46,6 @@ async fn test_api_end_to_end() {
 
 #[tokio::test]
 async fn test_token_expiration_triggers_refresh() {
-    use facet_client::util::MockClock;
-
     let lock_manager = Arc::new(MemoryLockManager::new());
     let token_store = Arc::new(MemoryTokenStore::new());
     let token_client = Arc::new(MockTokenClient {});

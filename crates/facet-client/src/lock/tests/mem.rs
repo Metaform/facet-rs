@@ -11,8 +11,8 @@
 //
 
 use crate::lock::{LockError, LockManager, MemoryLockManager};
-use crate::util::{Clock, MockClock};
 use chrono::{TimeDelta, Utc};
+use facet_common::util::{Clock, MockClock};
 use std::sync::Arc;
 
 #[tokio::test]

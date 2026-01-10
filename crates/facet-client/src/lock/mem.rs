@@ -11,11 +11,11 @@
 //
 
 use crate::lock::{LockError, LockGuard, LockManager};
-use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use facet_common::util::{default_clock, Clock};
 
 struct LockRecord {
     owner: String,

@@ -11,10 +11,10 @@
 //
 
 use crate::lock::{LockError, LockGuard, LockManager};
-use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::TimeDelta;
+use facet_common::util::{default_clock, Clock};
 use rand::Rng;
 use sqlx::PgPool;
 use std::sync::Arc;

@@ -12,9 +12,9 @@
 
 use bon::Builder;
 
-/// Participant data
+/// Participant data.
 #[derive(Builder, Clone)]
 pub struct ParticipantContext {
-    identifier: String,
-    audience: String,
+    // identifier: String,
+    // audience: String,
 }

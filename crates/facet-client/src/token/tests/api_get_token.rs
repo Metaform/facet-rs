@@ -10,10 +10,10 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::token::tests::mocks::{MockLockManager, MockTokenClient, MockTokenStore, create_dummy_lock_guard};
+use crate::token::tests::mocks::{create_dummy_lock_guard, MockLockManager, MockTokenClient, MockTokenStore};
 use crate::token::{TokenClientApi, TokenData, TokenError};
-use crate::util::MockClock;
 use chrono::{TimeDelta, Utc};
+use facet_common::util::MockClock;
 use mockall::predicate::eq;
 use std::sync::Arc;
 

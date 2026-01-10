@@ -829,6 +829,7 @@ dependencies = [
  "bon",
  "chrono",
  "ed25519-dalek",
+ "facet-common",
  "hex",
  "jsonwebtoken",
  "log",

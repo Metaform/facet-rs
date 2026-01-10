@@ -12,10 +12,10 @@
 
 use crate::token::jwt::LocalJwtGenerator;
 use crate::token::{JwtGenerator, TokenClaims, TokenClient, TokenData, TokenError};
-use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::TimeDelta;
+use facet_common::util::{default_clock, Clock};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;

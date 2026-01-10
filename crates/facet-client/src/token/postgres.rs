@@ -11,10 +11,10 @@
 //
 
 use crate::token::{TokenData, TokenError, TokenStore};
-use crate::util::{Clock, decrypt, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::DateTime;
+use facet_common::util::{decrypt, default_clock, encrypt, Clock};
 use sodiumoxide::crypto::secretbox;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -48,7 +48,7 @@ use std::sync::Arc;
 /// let pool = PgPool::connect("").await?;
 /// let password = std::env::var("ENCRYPTION_PASSWORD")?;
 /// let salt_hex = std::env::var("ENCRYPTION_SALT")?;
-/// let key = facet_client::util::encryption_key(&password, &salt_hex)?;
+/// let key = facet_common::util::encryption_key(&password, &salt_hex)?;
 ///
 /// let store = PostgresTokenStore::builder()
 ///     .pool(pool)
@@ -184,11 +184,10 @@ impl TokenStore for PostgresTokenStore {
 
     async fn save_token(&self, data: TokenData) -> Result<(), TokenError> {
         // Encrypt token
-        let (encrypted_token, token_nonce) = crate::util::encrypt(&self.encryption_key, data.token.as_bytes());
+        let (encrypted_token, token_nonce) = encrypt(&self.encryption_key, data.token.as_bytes());
 
         // Encrypt refresh_token
-        let (encrypted_refresh_token, refresh_nonce) =
-            crate::util::encrypt(&self.encryption_key, data.refresh_token.as_bytes());
+        let (encrypted_refresh_token, refresh_nonce) = encrypt(&self.encryption_key, data.refresh_token.as_bytes());
 
         let now = self.clock.now();
 
@@ -223,11 +222,10 @@ impl TokenStore for PostgresTokenStore {
 
     async fn update_token(&self, data: TokenData) -> Result<(), TokenError> {
         // Encrypt token
-        let (encrypted_token, token_nonce) = crate::util::encrypt(&self.encryption_key, data.token.as_bytes());
+        let (encrypted_token, token_nonce) = encrypt(&self.encryption_key, data.token.as_bytes());
 
         // Encrypt refresh_token
-        let (encrypted_refresh_token, refresh_nonce) =
-            crate::util::encrypt(&self.encryption_key, data.refresh_token.as_bytes());
+        let (encrypted_refresh_token, refresh_nonce) = encrypt(&self.encryption_key, data.refresh_token.as_bytes());
 
         let now = self.clock.now();
 

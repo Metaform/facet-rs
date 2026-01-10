@@ -11,9 +11,9 @@
 //
 
 use crate::token::{TokenData, TokenError, TokenStore};
-use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use facet_common::util::{default_clock, Clock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

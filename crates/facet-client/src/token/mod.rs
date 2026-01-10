@@ -24,10 +24,10 @@ pub use postgres::PostgresTokenStore;
 const FIVE_SECONDS_MILLIS: i64 = 5_000;
 
 use crate::lock::LockManager;
-use crate::util::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::{DateTime, TimeDelta, Utc};
+use facet_common::util::{default_clock, Clock};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::sync::Arc;

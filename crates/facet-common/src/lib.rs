@@ -10,4 +10,5 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-mod context;
+pub mod context;
+pub mod util;

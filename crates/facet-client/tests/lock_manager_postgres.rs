@@ -17,9 +17,9 @@ use chrono::{TimeDelta, Utc};
 use facet_client::lock::postgres::PostgresLockManager;
 use facet_client::lock::LockError::{LockAlreadyHeld, LockNotFound};
 use facet_client::lock::LockManager;
-use facet_client::util::{Clock, MockClock};
 use std::sync::Arc;
 use uuid::Uuid;
+use facet_common::util::{Clock, MockClock};
 
 #[tokio::test]
 async fn test_postgres_lock_exclusive_lock() {
