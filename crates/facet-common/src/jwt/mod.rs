@@ -197,7 +197,6 @@ impl JwtVerifier for LocalJwtVerifier {
             _ => JwtVerificationError::VerificationFailed(e.to_string()),
         })?;
 
-        // TODO validate audience using participant_context as a resolver
         Ok(token_data.claims)
     }
 }
