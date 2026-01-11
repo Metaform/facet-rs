@@ -15,14 +15,15 @@ mod tests;
 
 pub mod jwtutils;
 
+use crate::context::ParticipantContext;
 use bon::Builder;
 use jsonwebtoken::errors::ErrorKind;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use crate::context::ParticipantContext;
 
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 pub struct TokenClaims {
@@ -40,7 +41,11 @@ pub struct TokenClaims {
 }
 
 pub trait JwtGenerator: Send + Sync {
-    fn generate_token(&self, participant_context: &ParticipantContext, claims: TokenClaims) -> Result<String, JwtGenerationError>;
+    fn generate_token(
+        &self,
+        participant_context: &ParticipantContext,
+        claims: TokenClaims,
+    ) -> Result<String, JwtGenerationError>;
 }
 
 #[derive(Debug, Error)]
@@ -51,7 +56,11 @@ pub enum JwtGenerationError {
 
 /// Verifies JWT tokens and validates claims.
 pub trait JwtVerifier: Send + Sync {
-    fn verify_token(&self, participant_context: &ParticipantContext, token: &str) -> Result<TokenClaims, JwtVerificationError>;
+    fn verify_token(
+        &self,
+        participant_context: &ParticipantContext,
+        token: &str,
+    ) -> Result<TokenClaims, JwtVerificationError>;
 }
 
 /// Errors that can occur during JWT verification.
@@ -119,7 +128,11 @@ impl LocalJwtGenerator {
 }
 
 impl JwtGenerator for LocalJwtGenerator {
-    fn generate_token(&self, participant_context: &ParticipantContext, claims: TokenClaims) -> Result<String, JwtGenerationError> {
+    fn generate_token(
+        &self,
+        participant_context: &ParticipantContext,
+        claims: TokenClaims,
+    ) -> Result<String, JwtGenerationError> {
         let key_bytes = (self.signing_key_resolver)(participant_context);
         let algorithm = self.signing_algorithm.into();
         let encoding_key = self.load_encoding_key(&key_bytes)?;
@@ -151,7 +164,6 @@ pub struct LocalJwtVerifier {
 
 impl LocalJwtVerifier {
     fn load_decoding_key(&self, iss: &str, kid: &str) -> Result<DecodingKey, JwtVerificationError> {
-        // TODO pass in DID and
         let key_bytes = self.verification_key_resolver.resolve_verification_key(iss, kid)?;
         match (&self.signing_algorithm, &self.key_format) {
             (SigningAlgorithm::EdDSA, KeyFormat::PEM) => DecodingKey::from_ed_pem(&key_bytes).map_err(|e| {
@@ -166,14 +178,16 @@ impl LocalJwtVerifier {
 }
 
 impl JwtVerifier for LocalJwtVerifier {
-    fn verify_token(&self, _participant_context: &ParticipantContext, token: &str) -> Result<TokenClaims, JwtVerificationError> {
-        // TODO parse and pass in DID and KID
+    fn verify_token(
+        &self,
+        participant_context: &ParticipantContext,
+        token: &str,
+    ) -> Result<TokenClaims, JwtVerificationError> {
+        // TODO parse JWT and pass in ISS and KID
         let decoding_key = self.load_decoding_key("", "")?;
         let mut validation = Validation::new(self.signing_algorithm.into());
         validation.leeway = self.leeway_seconds;
-
-        // FIXME remove when participant context is handled
-        validation.validate_aud = false;
+        validation.aud = Some(HashSet::from([participant_context.audience.clone()]));
 
         let token_data = decode::<TokenClaims>(token, &decoding_key, &validation).map_err(|e| match e.kind() {
             ErrorKind::ExpiredSignature => JwtVerificationError::TokenExpired,

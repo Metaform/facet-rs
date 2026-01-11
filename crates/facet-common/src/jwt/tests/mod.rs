@@ -39,7 +39,7 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
     let claims = TokenClaims::builder()
         .sub("user-id-123")
         .iss("user-id-123")
-        .aud("audience-123")
+        .aud("audience1")
         .iat(now)
         .exp(now + 10000)
         .custom({
@@ -53,8 +53,8 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
         .build();
 
     let pc = &ParticipantContext::builder()
-        .identifier("participant-1")
-        .audience("audience-123")
+        .identifier("participant1")
+        .audience("audience1")
         .build();
 
     let token = generator
@@ -65,11 +65,6 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
         .key_format(key_format)
         .verification_key_resolver(Arc::new(StaticResolver(public_key)))
         .signing_algorithm(SigningAlgorithm::EdDSA)
-        .build();
-
-    let pc = &ParticipantContext::builder()
-        .identifier("participant1")
-        .audience("audience1")
         .build();
 
     let verified_claims = verifier
@@ -149,14 +144,14 @@ fn test_leeway_allows_recently_expired_token_pem() {
     let claims = TokenClaims::builder()
         .sub("user-id-789")
         .iss("issuer-leeway")
-        .aud("audience-123")
+        .aud("audience1")
         .iat(now - 100)
         .exp(now - 20) // Expired 20 seconds ago
         .build();
 
     let pc = &ParticipantContext::builder()
         .identifier("participant-1")
-        .audience("audience-123")
+        .audience("audience1")
         .build();
 
     let token = generator
@@ -382,7 +377,7 @@ fn test_rsa_token_generation_validation_pem() {
     let claims = TokenClaims::builder()
         .sub("user-id-456")
         .iss("issuer-rsa")
-        .aud("audience-123")
+        .aud("audience1")
         .iat(now)
         .exp(now + 10000)
         .custom({
@@ -393,8 +388,8 @@ fn test_rsa_token_generation_validation_pem() {
         .build();
 
     let pc = &ParticipantContext::builder()
-        .identifier("participant-1")
-        .audience("audience-123")
+        .identifier("participant1")
+        .audience("audience1")
         .build();
 
     let token = generator
@@ -405,11 +400,6 @@ fn test_rsa_token_generation_validation_pem() {
         .key_format(KeyFormat::PEM)
         .verification_key_resolver(Arc::new(StaticResolver(public_key)))
         .signing_algorithm(SigningAlgorithm::RS256)
-        .build();
-
-    let pc = &ParticipantContext::builder()
-        .identifier("participant1")
-        .audience("audience1")
         .build();
 
     let verified_claims = verifier
