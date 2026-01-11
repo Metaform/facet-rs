@@ -13,6 +13,7 @@
 use crate::token::tests::mocks::{create_dummy_lock_guard, MockLockManager, MockTokenClient, MockTokenStore};
 use crate::token::{TokenClientApi, TokenData, TokenError};
 use chrono::{TimeDelta, Utc};
+use facet_common::context::ParticipantContext;
 use facet_common::util::MockClock;
 use mockall::predicate::eq;
 use std::sync::Arc;
@@ -25,11 +26,16 @@ async fn test_get_token_not_expiring_does_not_refresh() {
     let mut lock_manager = MockLockManager::new();
     lock_manager.expect_lock().never();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let mut token_store = MockTokenStore::new();
     token_store
         .expect_get_token()
         .once()
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -52,8 +58,13 @@ async fn test_get_token_not_expiring_does_not_refresh() {
         .refresh_before_expiry_ms(5_000)
         .build();
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let result = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
     assert_eq!(result, "active_token");
@@ -74,11 +85,16 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
         .times(2)
         .in_sequence(&mut seq)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -101,7 +117,10 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
         .expect_refresh_token()
         .once()
         .with(
-            eq("participant1"),
+            eq(ParticipantContext::builder()
+                .identifier("participant1")
+                .audience("audience1")
+                .build()),
             eq("identifier1"),
             eq("old_refresh"),
             eq("https://example.com/refresh"),
@@ -128,8 +147,13 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
     // Advance time so the token is within the 5s refresh threshold
     clock.advance(TimeDelta::seconds(6));
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let result = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
     assert_eq!(result, "new_token");
@@ -150,11 +174,16 @@ async fn test_get_token_expired_triggers_refresh() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
         .times(2)
         .in_sequence(&mut seq)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -191,8 +220,13 @@ async fn test_get_token_expired_triggers_refresh() {
         .clock(clock)
         .build();
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let result = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
     assert_eq!(result, "refreshed_token");
@@ -213,11 +247,16 @@ async fn test_refresh_updates_stored_token() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
         .times(2)
         .in_sequence(&mut seq)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -257,8 +296,14 @@ async fn test_refresh_updates_stored_token() {
         .build();
 
     clock.advance(TimeDelta::seconds(4));
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let _ = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
 }
@@ -275,11 +320,16 @@ async fn test_refresh_failure_returns_error() {
         .with(eq("identifier1"), eq("owner1"))
         .returning(|identifier, owner| Ok(create_dummy_lock_guard(identifier, owner)));
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let mut token_store = MockTokenStore::new();
     token_store
         .expect_get_token()
         .times(2)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -306,7 +356,13 @@ async fn test_refresh_failure_returns_error() {
         .build();
 
     clock.advance(TimeDelta::seconds(4));
-    let result = token_api.get_token("participant1", "identifier1", "owner1").await;
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let result = token_api.get_token(pc, "identifier1", "owner1").await;
     assert!(result.is_err());
 }
 
@@ -325,11 +381,16 @@ async fn test_lock_acquired_during_refresh() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
         .times(2)
         .in_sequence(&mut seq)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -369,9 +430,14 @@ async fn test_lock_acquired_during_refresh() {
 
     clock.advance(TimeDelta::seconds(4));
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Trigger refresh which should acquire the lock
     let _ = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
 
@@ -396,11 +462,16 @@ async fn test_lock_prevents_concurrent_refresh() {
             ))
         });
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let mut token_store = MockTokenStore::new();
     token_store
         .expect_get_token()
         .once()
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(move |_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -425,8 +496,13 @@ async fn test_lock_prevents_concurrent_refresh() {
 
     clock.advance(TimeDelta::seconds(4));
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Attempt to get token should fail (cannot acquire lock)
-    let result = token_api.get_token("participant1", "identifier1", "owner1").await;
+    let result = token_api.get_token(pc, "identifier1", "owner1").await;
     assert!(result.is_err(), "Should fail when lock is held by another owner");
 }
 
@@ -435,11 +511,16 @@ async fn test_token_not_found_error() {
     let mut lock_manager = MockLockManager::new();
     lock_manager.expect_lock().never();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let mut token_store = MockTokenStore::new();
     token_store
         .expect_get_token()
         .once()
-        .with(eq("participant1"), eq("nonexistent"))
+        .with(eq(pc), eq("nonexistent"))
         .returning(|_, id| Err(TokenError::token_not_found(id)));
 
     let mut token_client = MockTokenClient::new();
@@ -451,7 +532,12 @@ async fn test_token_not_found_error() {
         .token_client(Arc::new(token_client))
         .build();
 
-    let result = token_api.get_token("participant1", "nonexistent", "owner1").await;
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let result = token_api.get_token(pc, "nonexistent", "owner1").await;
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -477,11 +563,16 @@ async fn test_refresh_with_custom_refresh_threshold() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
         .times(2)
         .in_sequence(&mut seq)
-        .with(eq("participant1"), eq("identifier1"))
+        .with(eq(pc), eq("identifier1"))
         .returning(|_, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
@@ -521,8 +612,13 @@ async fn test_refresh_with_custom_refresh_threshold() {
 
     clock.advance(TimeDelta::seconds(11));
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let result = token_api
-        .get_token("participant1", "identifier1", "owner1")
+        .get_token(pc, "identifier1", "owner1")
         .await
         .unwrap();
     assert_eq!(result, "refreshed");
@@ -543,9 +639,14 @@ async fn test_multiple_tokens_independent_refresh() {
     let mut token_store = MockTokenStore::new();
     let mut seq = mockall::Sequence::new();
 
+    let pc = ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     token_store
         .expect_get_token()
-        .with(eq("participant1"), eq("token1"))
+        .with(eq(pc.clone()), eq("token1"))
         .times(2)
         .returning(|_, _| {
             Ok(TokenData {
@@ -560,7 +661,7 @@ async fn test_multiple_tokens_independent_refresh() {
 
     token_store
         .expect_get_token()
-        .with(eq("participant1"), eq("token2"))
+        .with(eq(pc), eq("token2"))
         .times(1)
         .returning(|_, _| {
             Ok(TokenData {
@@ -578,13 +679,15 @@ async fn test_multiple_tokens_independent_refresh() {
         .once()
         .in_sequence(&mut seq)
         .returning(|_| Ok(()));
-
     let mut token_client = MockTokenClient::new();
     token_client
         .expect_refresh_token()
         .once()
         .with(
-            eq("participant1"),
+            eq(ParticipantContext::builder()
+                .identifier("participant1")
+                .audience("audience1")
+                .build()),
             eq("token1"),
             eq("refresh1"),
             eq("https://example.com/refresh"),
@@ -610,11 +713,16 @@ async fn test_multiple_tokens_independent_refresh() {
 
     clock.advance(TimeDelta::seconds(4));
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // token1 should trigger refresh
-    let result1 = token_api.get_token("participant1", "token1", "owner1").await.unwrap();
+    let result1 = token_api.get_token(pc, "token1", "owner1").await.unwrap();
     assert_eq!(result1, "refreshed1");
 
     // token2 should not refresh
-    let result2 = token_api.get_token("participant1", "token2", "owner1").await.unwrap();
+    let result2 = token_api.get_token(pc, "token2", "owner1").await.unwrap();
     assert_eq!(result2, "token2");
 }

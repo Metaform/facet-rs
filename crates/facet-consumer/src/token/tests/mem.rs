@@ -12,6 +12,7 @@
 
 use crate::token::{MemoryTokenStore, TokenData, TokenError, TokenStore};
 use chrono::{TimeDelta, Utc};
+use facet_common::context::ParticipantContext;
 use facet_common::util::{Clock, MockClock};
 use std::sync::Arc;
 
@@ -61,7 +62,13 @@ async fn create_store_with_tokens() -> MemoryTokenStore {
 #[tokio::test]
 async fn test_new_store_is_empty() {
     let store = MemoryTokenStore::new();
-    let data = store.get_token("participant1", "nonexistent").await;
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let data = store.get_token(pc, "nonexistent").await;
     assert!(data.is_err());
 }
 
@@ -81,8 +88,13 @@ async fn test_save_token_success() {
     let result = store.save_token(test_data.clone()).await;
     assert!(result.is_ok(), "save_token should return Ok");
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     let retrieved = store
-        .get_token("participant1", "provider1")
+        .get_token(pc, "provider1")
         .await
         .expect("Failed to retrieve saved token");
     assert_eq!(retrieved.identifier, "provider1", "Identifier should match");
@@ -99,18 +111,14 @@ async fn test_save_token_success() {
 async fn test_save_multiple_tokens() {
     let store = create_store_with_tokens().await;
 
-    assert_eq!(
-        store.get_token("participant1", "provider1").await.unwrap().token,
-        "token1"
-    );
-    assert_eq!(
-        store.get_token("participant1", "provider2").await.unwrap().token,
-        "token2"
-    );
-    assert_eq!(
-        store.get_token("participant1", "provider3").await.unwrap().token,
-        "token3"
-    );
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    assert_eq!(store.get_token(pc, "provider1").await.unwrap().token, "token1");
+    assert_eq!(store.get_token(pc, "provider2").await.unwrap().token, "token2");
+    assert_eq!(store.get_token(pc, "provider3").await.unwrap().token, "token3");
 }
 
 #[tokio::test]
@@ -144,8 +152,13 @@ async fn test_save_token_upserts_on_duplicate() {
     // Second save with the same identifier should succeed and update
     store.save_token(token_data2).await.unwrap();
 
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Verify the token was updated to new values
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let retrieved = store.get_token(pc1, "provider1").await.unwrap();
     assert_eq!(retrieved.token, "new_token");
     assert_eq!(retrieved.refresh_token, "new_refresh");
     assert_eq!(retrieved.expires_at, expires_at_2);
@@ -179,7 +192,13 @@ async fn test_remove_tokens_used_before_success() {
         .expect("Failed to remove tokens");
 
     assert_eq!(removed, 1);
-    assert!(store.get_token("participant1", "provider1").await.is_err());
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    assert!(store.get_token(pc, "provider1").await.is_err());
 }
 
 #[tokio::test]
@@ -208,14 +227,29 @@ async fn test_context_isolation_save() {
     store.save_token(token_p1).await.unwrap();
     store.save_token(token_p2).await.unwrap();
 
-    let retrieved_p1 = store.get_token("participant1", "provider").await.unwrap();
-    let retrieved_p2 = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let retrieved_p1 = store.get_token(pc1, "provider").await.unwrap();
+    let retrieved_p2 = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(retrieved_p1.token, "token_p1");
     assert_eq!(retrieved_p2.token, "token_p2");
 
+    let pc3 = &ParticipantContext::builder()
+        .identifier("participant3")
+        .audience("audience3")
+        .build();
+
     // Verify participant3 cannot access participant1's token
-    let result_p3 = store.get_token("participant3", "provider").await;
+    let result_p3 = store.get_token(pc3, "provider").await;
     assert!(result_p3.is_err());
 }
 
@@ -245,16 +279,31 @@ async fn test_context_isolation_get() {
     store.save_token(token_p1).await.unwrap();
     store.save_token(token_p2).await.unwrap();
 
-    let p1_result = store.get_token("participant1", "provider").await.unwrap();
-    let p2_result = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let p1_result = store.get_token(pc1, "provider").await.unwrap();
+    let p2_result = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(p1_result.participant_context, "participant1");
     assert_eq!(p1_result.token, "token_p1");
     assert_eq!(p2_result.participant_context, "participant2");
     assert_eq!(p2_result.token, "token_p2");
 
+    let pc3 = &ParticipantContext::builder()
+        .identifier("participant3")
+        .audience("audience3")
+        .build();
+
     // Verify participant3 cannot get either token
-    let result_p3 = store.get_token("participant3", "provider").await;
+    let result_p3 = store.get_token(pc3, "provider").await;
     assert!(result_p3.is_err());
     assert!(result_p3.unwrap_err().to_string().contains("Token not found"));
 }
@@ -296,8 +345,18 @@ async fn test_context_isolation_update() {
 
     store.update_token(updated_p1).await.unwrap();
 
-    let p1_result = store.get_token("participant1", "provider").await.unwrap();
-    let p2_result = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let p1_result = store.get_token(pc1, "provider").await.unwrap();
+    let p2_result = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(p1_result.token, "token_p1_updated");
     assert_eq!(p2_result.token, "token_p2");
@@ -345,11 +404,18 @@ async fn test_context_isolation_remove() {
 
     store.remove_token("participant1", "provider").await.unwrap();
 
-    assert!(store.get_token("participant1", "provider").await.is_err());
-    assert_eq!(
-        store.get_token("participant2", "provider").await.unwrap().token,
-        "token_p2"
-    );
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    assert!(store.get_token(pc1, "provider").await.is_err());
+    assert_eq!(store.get_token(pc2, "provider").await.unwrap().token, "token_p2");
 
     // Verify participant3 cannot remove a token they don't own
     let result_p3 = store.remove_token("participant3", "provider").await;
@@ -357,8 +423,5 @@ async fn test_context_isolation_remove() {
     assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 
     // Verify p2's token still exists after p3 tries to remove a non-existent token
-    assert_eq!(
-        store.get_token("participant2", "provider").await.unwrap().token,
-        "token_p2"
-    );
+    assert_eq!(store.get_token(pc2, "provider").await.unwrap().token, "token_p2");
 }

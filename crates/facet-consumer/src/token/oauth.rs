@@ -14,8 +14,9 @@ use crate::token::{TokenClient, TokenData, TokenError};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::TimeDelta;
+use facet_common::context::ParticipantContext;
 use facet_common::jwt::{JwtGenerator, LocalJwtGenerator, TokenClaims};
-use facet_common::util::{default_clock, Clock};
+use facet_common::util::{Clock, default_clock};
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -45,7 +46,7 @@ struct TokenResponse {
 impl TokenClient for OAuth2TokenClient {
     async fn refresh_token(
         &self,
-        participant_context: &str,
+        participant_context: &ParticipantContext,
         endpoint_identifier: &str,
         refresh_token: &str,
         refresh_endpoint: &str,
@@ -93,7 +94,7 @@ impl TokenClient for OAuth2TokenClient {
             .unwrap_or_else(|| refresh_token.to_string());
 
         Ok(TokenData {
-            participant_context: participant_context.to_string(),
+            participant_context: participant_context.identifier.clone(),
             identifier: endpoint_identifier.to_string(),
             token: token_response.access_token,
             refresh_token: new_refresh_token,

@@ -12,6 +12,7 @@
 
 use crate::lock::{LockGuard, LockManager, UnlockOps};
 use crate::token::{TokenClient, TokenData, TokenError, TokenStore};
+use facet_common::context::ParticipantContext;
 use mockall::mock;
 use mockall::predicate::*;
 use std::sync::Arc;
@@ -45,7 +46,7 @@ mock! {
 
     #[async_trait::async_trait]
     impl TokenClient for TokenClient {
-        async fn refresh_token(&self, participant_context: &str, endpoint_identifier: &str, refresh_token: &str, refresh_endpoint: &str) -> Result<TokenData, TokenError>;
+        async fn refresh_token(&self, participant_context: &ParticipantContext, endpoint_identifier: &str, refresh_token: &str, refresh_endpoint: &str) -> Result<TokenData, TokenError>;
     }
 }
 
@@ -54,7 +55,7 @@ mock! {
 
     #[async_trait::async_trait]
     impl TokenStore for TokenStore {
-        async fn get_token(&self, participant_context: &str, identifier: &str) -> Result<TokenData, TokenError>;
+        async fn get_token(&self, participant_context: &ParticipantContext, identifier: &str) -> Result<TokenData, TokenError>;
         async fn save_token(&self, data: TokenData) -> Result<(), TokenError>;
         async fn update_token(&self, data: TokenData) -> Result<(), TokenError>;
         async fn remove_token(&self, participant_context: &str, identifier: &str) -> Result<(), TokenError>;

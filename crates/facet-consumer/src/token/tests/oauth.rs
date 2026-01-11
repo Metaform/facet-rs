@@ -10,10 +10,11 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::token::oauth::OAuth2TokenClient;
 use crate::token::TokenClient;
-use facet_common::jwt::jwtutils::generate_ed25519_keypair_pem;
+use crate::token::oauth::OAuth2TokenClient;
+use facet_common::context::ParticipantContext;
 use facet_common::jwt::LocalJwtGenerator;
+use facet_common::jwt::jwtutils::generate_ed25519_keypair_pem;
 use std::sync::Arc;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -48,14 +49,14 @@ async fn test_refresh_token_success() {
         .mount(&mock_server)
         .await;
 
+    let pc = &ParticipantContext::builder()
+        .identifier("test-participant")
+        .audience("test-audience")
+        .build();
+
     let refresh_endpoint = format!("{}/token/refresh", mock_server.uri());
     let token_data = client
-        .refresh_token(
-            "test-participant",
-            "test-identifier",
-            "old_refresh_token",
-            &refresh_endpoint,
-        )
+        .refresh_token(pc, "test-identifier", "old_refresh_token", &refresh_endpoint)
         .await
         .expect("Token refresh should succeed");
 

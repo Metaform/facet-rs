@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 use thiserror::Error;
+use crate::context::ParticipantContext;
 
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 pub struct TokenClaims {
@@ -39,7 +40,7 @@ pub struct TokenClaims {
 }
 
 pub trait JwtGenerator: Send + Sync {
-    fn generate_token(&self, participant_context: &str, claims: TokenClaims) -> Result<String, JwtGenerationError>;
+    fn generate_token(&self, participant_context: &ParticipantContext, claims: TokenClaims) -> Result<String, JwtGenerationError>;
 }
 
 #[derive(Debug, Error)]
@@ -50,7 +51,7 @@ pub enum JwtGenerationError {
 
 /// Verifies JWT tokens and validates claims.
 pub trait JwtVerifier: Send + Sync {
-    fn verify_token(&self, participant_context: &str, token: &str) -> Result<TokenClaims, JwtVerificationError>;
+    fn verify_token(&self, participant_context: &ParticipantContext, token: &str) -> Result<TokenClaims, JwtVerificationError>;
 }
 
 /// Errors that can occur during JWT verification.
@@ -98,7 +99,7 @@ pub struct LocalJwtGenerator {
     #[builder(default = KeyFormat::PEM)]
     key_format: KeyFormat,
 
-    signing_key_resolver: Arc<dyn Fn(&str) -> Vec<u8> + Send + Sync>,
+    signing_key_resolver: Arc<dyn Fn(&ParticipantContext) -> Vec<u8> + Send + Sync>,
 
     #[builder(default = SigningAlgorithm::EdDSA)]
     signing_algorithm: SigningAlgorithm,
@@ -118,7 +119,7 @@ impl LocalJwtGenerator {
 }
 
 impl JwtGenerator for LocalJwtGenerator {
-    fn generate_token(&self, participant_context: &str, claims: TokenClaims) -> Result<String, JwtGenerationError> {
+    fn generate_token(&self, participant_context: &ParticipantContext, claims: TokenClaims) -> Result<String, JwtGenerationError> {
         let key_bytes = (self.signing_key_resolver)(participant_context);
         let algorithm = self.signing_algorithm.into();
         let encoding_key = self.load_encoding_key(&key_bytes)?;
@@ -165,7 +166,7 @@ impl LocalJwtVerifier {
 }
 
 impl JwtVerifier for LocalJwtVerifier {
-    fn verify_token(&self, _participant_context: &str, token: &str) -> Result<TokenClaims, JwtVerificationError> {
+    fn verify_token(&self, _participant_context: &ParticipantContext, token: &str) -> Result<TokenClaims, JwtVerificationError> {
         // TODO parse and pass in DID and KID
         let decoding_key = self.load_decoding_key("", "")?;
         let mut validation = Validation::new(self.signing_algorithm.into());

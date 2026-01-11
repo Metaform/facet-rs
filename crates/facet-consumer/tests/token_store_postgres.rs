@@ -14,7 +14,8 @@ mod common;
 
 use chrono::{TimeDelta, Utc};
 use common::setup_postgres_container;
-use facet_common::util::{encryption_key, Clock, MockClock};
+use facet_common::context::ParticipantContext;
+use facet_common::util::{Clock, MockClock, encryption_key};
 use facet_consumer::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
@@ -64,8 +65,13 @@ async fn test_postgres_save_and_get_token() {
         refresh_endpoint: "https://auth.example.com/refresh".to_string(),
     };
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     store.save_token(token_data.clone()).await.unwrap();
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
 
     assert_eq!(retrieved.identifier, "provider1");
     assert_eq!(retrieved.token, "access_token_123");
@@ -86,7 +92,12 @@ async fn test_postgres_get_nonexistent_token() {
         .build();
     store.initialize().await.unwrap();
 
-    let result = store.get_token("participant1", "nonexistent").await;
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let result = store.get_token(pc, "nonexistent").await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Token not found"));
 }
@@ -127,11 +138,16 @@ async fn test_postgres_save_token_upserts_on_duplicate() {
     // First save succeeds
     store.save_token(token_data1).await.unwrap();
 
-    // Second save with same identifier should succeed and update
+    // Second save with the same identifier should succeed and update
     store.save_token(token_data2).await.unwrap();
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Verify the token was updated to new values
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
     assert_eq!(retrieved.token, "new_token");
     assert_eq!(retrieved.refresh_token, "new_refresh");
     assert_eq!(retrieved.expires_at, expires_at_2);
@@ -174,7 +190,12 @@ async fn test_postgres_update_token_success() {
 
     store.update_token(updated_data).await.unwrap();
 
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
     assert_eq!(retrieved.token, "token_updated");
     assert_eq!(retrieved.refresh_token, "refresh_updated");
     assert_eq!(retrieved.expires_at, new_expires_at);
@@ -232,7 +253,12 @@ async fn test_postgres_remove_token_success() {
     store.save_token(token_data).await.unwrap();
     store.remove_token("participant1", "provider1").await.unwrap();
 
-    let result = store.get_token("participant1", "provider1").await;
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let result = store.get_token(pc, "provider1").await;
     assert!(result.is_err());
 }
 
@@ -289,8 +315,13 @@ async fn test_postgres_multiple_tokens() {
     store.save_token(token1).await.unwrap();
     store.save_token(token2).await.unwrap();
 
-    let retrieved1 = store.get_token("participant1", "provider1").await.unwrap();
-    let retrieved2 = store.get_token("participant1", "provider2").await.unwrap();
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let retrieved1 = store.get_token(pc, "provider1").await.unwrap();
+    let retrieved2 = store.get_token(pc, "provider2").await.unwrap();
 
     assert_eq!(retrieved1.token, "token1");
     assert_eq!(retrieved2.token, "token2");
@@ -318,8 +349,13 @@ async fn test_postgres_token_with_special_characters() {
         refresh_endpoint: "https://auth.example.com/token?param=value&other=123".to_string(),
     };
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     store.save_token(token_data).await.unwrap();
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
 
     assert_eq!(retrieved.identifier, "provider1");
     assert!(retrieved.token.contains("eyJ"));
@@ -349,7 +385,13 @@ async fn test_postgres_token_with_long_values() {
     };
 
     store.save_token(token_data).await.unwrap();
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
 
     assert_eq!(retrieved.token.len(), 2000);
     assert_eq!(retrieved.refresh_token.len(), 2000);
@@ -391,11 +433,16 @@ async fn test_postgres_save_get_update_remove_flow() {
 
     store.update_token(updated_data).await.unwrap();
 
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
     assert_eq!(retrieved.token, "token2");
 
     store.remove_token("participant1", "provider1").await.unwrap();
-    let result = store.get_token("participant1", "provider1").await;
+    let result = store.get_token(pc, "provider1").await;
     assert!(result.is_err());
 }
 
@@ -426,7 +473,13 @@ async fn test_postgres_last_accessed_timestamp_recorded() {
 
     // Advance time and access the token
     mock_clock.advance(TimeDelta::seconds(100));
-    let _retrieved = store.get_token("participant1", "provider1").await.unwrap();
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let _retrieved = store.get_token(pc, "provider1").await.unwrap();
 
     // Use mock_clock directly (not the cast version)
     assert_eq!(mock_clock.now(), initial_time + TimeDelta::seconds(100));
@@ -470,9 +523,14 @@ async fn test_postgres_deterministic_timestamps() {
 
     store.save_token(token2).await.unwrap();
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Verify both tokens exist with their respective timestamps
-    let retrieved1 = store.get_token("participant1", "provider1").await.unwrap();
-    let retrieved2 = store.get_token("participant1", "provider2").await.unwrap();
+    let retrieved1 = store.get_token(pc, "provider1").await.unwrap();
+    let retrieved2 = store.get_token(pc, "provider2").await.unwrap();
 
     assert_eq!(retrieved1.identifier, "provider1");
     assert_eq!(retrieved2.identifier, "provider2");
@@ -518,8 +576,13 @@ async fn test_postgres_tokens_are_encrypted_at_rest() {
     assert!(!raw_record.0.is_empty());
     assert!(!raw_record.1.is_empty());
 
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
     // Verify we can still retrieve and decrypt properly
-    let retrieved = store.get_token("participant1", "provider1").await.unwrap();
+    let retrieved = store.get_token(pc, "provider1").await.unwrap();
     assert_eq!(retrieved.token, "plaintext_access_token");
     assert_eq!(retrieved.refresh_token, "plaintext_refresh_token");
 }
@@ -559,14 +622,29 @@ async fn test_context_isolation_save() {
     store.save_token(token_p1).await.unwrap();
     store.save_token(token_p2).await.unwrap();
 
-    let retrieved_p1 = store.get_token("participant1", "provider").await.unwrap();
-    let retrieved_p2 = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let retrieved_p1 = store.get_token(pc1, "provider").await.unwrap();
+    let retrieved_p2 = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(retrieved_p1.token, "token_p1");
     assert_eq!(retrieved_p2.token, "token_p2");
 
+    let pc3 = &ParticipantContext::builder()
+        .identifier("participant3")
+        .audience("audience3")
+        .build();
+
     // Verify participant3 cannot access the token
-    let result_p3 = store.get_token("participant3", "provider").await;
+    let result_p3 = store.get_token(pc3, "provider").await;
     assert!(result_p3.is_err());
 }
 
@@ -605,16 +683,31 @@ async fn test_context_isolation_get() {
     store.save_token(token_p1).await.unwrap();
     store.save_token(token_p2).await.unwrap();
 
-    let p1_result = store.get_token("participant1", "provider").await.unwrap();
-    let p2_result = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let p1_result = store.get_token(pc1, "provider").await.unwrap();
+    let p2_result = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(p1_result.participant_context, "participant1");
     assert_eq!(p1_result.token, "token_p1");
     assert_eq!(p2_result.participant_context, "participant2");
     assert_eq!(p2_result.token, "token_p2");
 
+    let pc3 = &ParticipantContext::builder()
+        .identifier("participant3")
+        .audience("audience3")
+        .build();
+
     // Verify participant3 cannot get either token
-    let result_p3 = store.get_token("participant3", "provider").await;
+    let result_p3 = store.get_token(pc3, "provider").await;
     assert!(result_p3.is_err());
     assert!(result_p3.unwrap_err().to_string().contains("Token not found"));
 }
@@ -665,8 +758,18 @@ async fn test_context_isolation_update() {
 
     store.update_token(updated_p1).await.unwrap();
 
-    let p1_result = store.get_token("participant1", "provider").await.unwrap();
-    let p2_result = store.get_token("participant2", "provider").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    let p1_result = store.get_token(pc1, "provider").await.unwrap();
+    let p2_result = store.get_token(pc2, "provider").await.unwrap();
 
     assert_eq!(p1_result.token, "token_p1_updated");
     assert_eq!(p2_result.token, "token_p2");
@@ -723,11 +826,18 @@ async fn test_context_isolation_remove() {
 
     store.remove_token("participant1", "provider").await.unwrap();
 
-    assert!(store.get_token("participant1", "provider").await.is_err());
-    assert_eq!(
-        store.get_token("participant2", "provider").await.unwrap().token,
-        "token_p2"
-    );
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let pc2 = &ParticipantContext::builder()
+        .identifier("participant2")
+        .audience("audience2")
+        .build();
+
+    assert!(store.get_token(pc1, "provider").await.is_err());
+    assert_eq!(store.get_token(pc2, "provider").await.unwrap().token, "token_p2");
 
     // Verify participant3 cannot remove a token they don't own
     let result_p3 = store.remove_token("participant3", "provider").await;
@@ -735,8 +845,5 @@ async fn test_context_isolation_remove() {
     assert!(matches!(result_p3.unwrap_err(), TokenError::TokenNotFound { .. }));
 
     // Verify p2's token still exists after p3 tries to remove a non-existent token
-    assert_eq!(
-        store.get_token("participant2", "provider").await.unwrap().token,
-        "token_p2"
-    );
+    assert_eq!(store.get_token(pc2, "provider").await.unwrap().token, "token_p2");
 }

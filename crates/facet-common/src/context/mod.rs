@@ -13,8 +13,11 @@
 use bon::Builder;
 
 /// Participant data.
-#[derive(Builder, Clone)]
+#[derive(Builder, Clone, Debug, PartialEq)]
 pub struct ParticipantContext {
-    // identifier: String,
-    // audience: String,
+    #[builder(into)]
+    pub identifier: String,
+
+    #[builder(into)]
+    pub audience: String,
 }

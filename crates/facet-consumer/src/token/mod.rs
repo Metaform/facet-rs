@@ -26,8 +26,9 @@ use crate::lock::LockManager;
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::{DateTime, TimeDelta, Utc};
+use facet_common::context::ParticipantContext;
 use facet_common::jwt::JwtGenerationError;
-use facet_common::util::{default_clock, Clock};
+use facet_common::util::{Clock, default_clock};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -50,7 +51,7 @@ pub struct TokenClientApi {
 impl TokenClientApi {
     pub async fn get_token(
         &self,
-        participant_context: &str,
+        participant_context: &ParticipantContext,
         identifier: &str,
         owner: &str,
     ) -> Result<String, TokenError> {
@@ -132,7 +133,7 @@ impl TokenClientApi {
 pub trait TokenClient: Send + Sync {
     async fn refresh_token(
         &self,
-        participant_context: &str,
+        participant_context: &ParticipantContext,
         endpoint_identifier: &str,
         refresh_token: &str,
         refresh_endpoint: &str,
@@ -163,7 +164,11 @@ pub trait TokenStore: Send + Sync {
     ///
     /// # Errors
     /// Returns `TokenError::TokenNotFound` if the token does not exist, or database/decryption errors.
-    async fn get_token(&self, participant_context: &str, identifier: &str) -> Result<TokenData, TokenError>;
+    async fn get_token(
+        &self,
+        participant_context: &ParticipantContext,
+        identifier: &str,
+    ) -> Result<TokenData, TokenError>;
 
     /// Saves or updates a token.
     ///

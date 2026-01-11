@@ -12,7 +12,8 @@
 
 use async_trait::async_trait;
 use chrono::{TimeDelta, Utc};
-use facet_common::util::{default_clock, Clock, MockClock};
+use facet_common::context::ParticipantContext;
+use facet_common::util::{Clock, MockClock, default_clock};
 use facet_consumer::lock::mem::MemoryLockManager;
 use facet_consumer::token::mem::MemoryTokenStore;
 use facet_consumer::token::{TokenClientApi, TokenData, TokenError, TokenStore};
@@ -41,7 +42,12 @@ async fn test_api_end_to_end() {
         .clock(default_clock())
         .build();
 
-    let _ = token_api.get_token("participant1", "test", "owner1").await.unwrap();
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let _ = token_api.get_token(pc1, "test", "owner1").await.unwrap();
 }
 
 #[tokio::test]
@@ -71,9 +77,14 @@ async fn test_token_expiration_triggers_refresh() {
         .build();
 
     // Advance time so the token is about to expire
-    clock.advance(TimeDelta::seconds(6)); // Now + 6s, token expires at +10s, the refresh threshold is 5s
+    clock.advance(TimeDelta::seconds(6)); // Now + 6s, the token expires at +10s, the refresh threshold is 5s
 
-    let result = token_api.get_token("participant1", "test", "owner1").await;
+    let pc1 = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let result = token_api.get_token(pc1, "test", "owner1").await;
     // Should trigger refresh since (now + 5s refresh buffer) > expires_at
     assert!(result.is_ok());
 }
@@ -84,7 +95,7 @@ struct MockTokenClient {}
 impl facet_consumer::token::TokenClient for MockTokenClient {
     async fn refresh_token(
         &self,
-        _participant_context: &str,
+        _participant_context: &ParticipantContext,
         _endpoint_identifier: &str,
         _refresh_token: &str,
         _refresh_endpoint: &str,

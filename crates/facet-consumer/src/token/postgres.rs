@@ -18,6 +18,7 @@ use facet_common::util::{decrypt, default_clock, encrypt, Clock};
 use sodiumoxide::crypto::secretbox;
 use sqlx::PgPool;
 use std::sync::Arc;
+use facet_common::context::ParticipantContext;
 
 /// Postgres-backed token store using SQLx connection pooling.
 ///
@@ -118,7 +119,7 @@ impl PostgresTokenStore {
 
 #[async_trait]
 impl TokenStore for PostgresTokenStore {
-    async fn get_token(&self, participant_context: &str, identifier: &str) -> Result<TokenData, TokenError> {
+    async fn get_token(&self, participant_context: &ParticipantContext, identifier: &str) -> Result<TokenData, TokenError> {
         let mut tx = self
             .pool
             .begin()
@@ -129,7 +130,7 @@ impl TokenStore for PostgresTokenStore {
             "SELECT participant_context, identifier, token, token_nonce, refresh_token, refresh_token_nonce, expires_at, refresh_endpoint
          FROM tokens WHERE participant_context = $1 AND identifier = $2",
         )
-            .bind(participant_context)
+            .bind(participant_context.identifier.clone())
             .bind(identifier)
             .fetch_optional(&mut *tx)
             .await
@@ -137,7 +138,7 @@ impl TokenStore for PostgresTokenStore {
             .ok_or_else(|| TokenError::token_not_found(identifier))?;
 
         // Verify the participant context matches (defense in depth)
-        if record.participant_context != participant_context {
+        if record.participant_context != participant_context.identifier {
             return Err(TokenError::token_not_found(identifier));
         }
 
@@ -161,7 +162,7 @@ impl TokenStore for PostgresTokenStore {
 
         // Update last_accessed within the transaction for atomicity
         sqlx::query("UPDATE tokens SET last_accessed = $3 WHERE participant_context = $1 AND identifier = $2")
-            .bind(participant_context)
+            .bind(participant_context.identifier.clone())
             .bind(identifier)
             .bind(now)
             .execute(&mut *tx)

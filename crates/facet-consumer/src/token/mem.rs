@@ -13,7 +13,8 @@
 use crate::token::{TokenData, TokenError, TokenStore};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use facet_common::util::{default_clock, Clock};
+use facet_common::context::ParticipantContext;
+use facet_common::util::{Clock, default_clock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -71,14 +72,18 @@ struct TokenRecord {
 
 #[async_trait]
 impl TokenStore for MemoryTokenStore {
-    async fn get_token(&self, participant_context: &str, identifier: &str) -> Result<TokenData, TokenError> {
+    async fn get_token(
+        &self,
+        participant_context: &ParticipantContext,
+        identifier: &str,
+    ) -> Result<TokenData, TokenError> {
         let mut guard = self.tokens.write().await;
-        let key = (participant_context.to_string(), identifier.to_string());
+        let key = (participant_context.identifier.clone(), identifier.to_string());
 
         let record = guard.get(&key).ok_or_else(|| TokenError::token_not_found(identifier))?;
 
         // Verify participant context matches (defense in depth)
-        if record.participant_context != participant_context {
+        if record.participant_context != participant_context.identifier {
             return Err(TokenError::token_not_found(identifier));
         }
 
@@ -139,10 +144,11 @@ impl TokenStore for MemoryTokenStore {
     async fn remove_token(&self, participant_context: &str, identifier: &str) -> Result<(), TokenError> {
         let mut tokens = self.tokens.write().await;
         let key = (participant_context.to_string(), identifier.to_string());
-        tokens.remove(&key).ok_or_else(|| TokenError::token_not_found(identifier))?;
+        tokens
+            .remove(&key)
+            .ok_or_else(|| TokenError::token_not_found(identifier))?;
         Ok(())
     }
-    
+
     async fn close(&self) {}
 }
-
