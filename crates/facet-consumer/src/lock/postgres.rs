@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::lock::{LockError, LockGuard, LockManager};
+use crate::lock::{LockError, LockGuard, LockManager, UnlockOps};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::TimeDelta;
@@ -287,21 +287,14 @@ impl PostgresLockManager {
 }
 
 #[async_trait]
-impl LockManager for PostgresLockManager {
-    async fn lock(&self, identifier: &str, owner: &str) -> Result<LockGuard, LockError> {
-        self.lock_internal(identifier, owner).await?;
-        Ok(LockGuard::new(Arc::new(self.clone()), identifier, owner))
-    }
-
+impl UnlockOps for PostgresLockManager {
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
-        // Wrap unlock operations in a transaction to ensure atomicity
         let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|e| LockError::store_error(format!("Failed to begin transaction: {}", e)))?;
 
-        // Decrement the reentrant count, but only if it's greater than 0 to prevent negative counts
         let rows_affected = sqlx::query(
             "UPDATE distributed_locks
              SET reentrant_count = reentrant_count - 1
@@ -315,7 +308,6 @@ impl LockManager for PostgresLockManager {
         .rows_affected();
 
         if rows_affected == 0 {
-            // Check if the lock exists with a different owner
             let existing_owner: Option<(String,)> =
                 sqlx::query_as("SELECT owner FROM distributed_locks WHERE identifier = $1")
                     .bind(identifier)
@@ -331,7 +323,6 @@ impl LockManager for PostgresLockManager {
             };
         }
 
-        // Delete the lock if the count reaches 0
         sqlx::query(
             "DELETE FROM distributed_locks
              WHERE identifier = $1 AND owner = $2 AND reentrant_count <= 0",
@@ -348,21 +339,31 @@ impl LockManager for PostgresLockManager {
 
         Ok(())
     }
+}
 
-    fn unlock_blocking(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
-        // Try block_in_place if we're in a multithreaded runtime
-        if let Ok(result) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(self.unlock(identifier, owner)))
-        })) {
-            return result;
-        }
+#[async_trait]
+impl LockManager for PostgresLockManager {
+    async fn lock(&self, identifier: &str, owner: &str) -> Result<LockGuard, LockError> {
+        self.lock_internal(identifier, owner).await?;
+        Ok(LockGuard::new(Arc::new(self.clone()), identifier, owner))
+    }
 
-        // block_in_place failed - we're in a single-threaded runtime or async context
-        // For PostgresLockManager, we can't create a new runtime because PgPool is tied
-        // to the original runtime. Return an error - the lock will expire via timeout.
-        Err(LockError::internal_error(
-            "Cannot unlock from Drop in this runtime context. Lock will expire via timeout.",
-        ))
+    async fn lock_count(&self, identifier: &str, owner: &str) -> Result<u32, LockError> {
+        let now = self.clock.now();
+        let cutoff_time = now - self.timeout;
+
+        let result: Option<(i32,)> = sqlx::query_as(
+            "SELECT reentrant_count FROM distributed_locks
+             WHERE identifier = $1 AND owner = $2 AND acquired_at >= $3",
+        )
+        .bind(identifier)
+        .bind(owner)
+        .bind(cutoff_time)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| LockError::store_error(format!("Failed to query lock count: {}", e)))?;
+
+        Ok(result.map(|(count,)| count as u32).unwrap_or(0))
     }
 
     async fn release_locks(&self, owner: &str) -> Result<(), LockError> {

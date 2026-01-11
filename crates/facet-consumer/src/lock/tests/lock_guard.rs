@@ -12,6 +12,7 @@
 
 use crate::lock::{LockManager, MemoryLockManager};
 use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::test]
 async fn test_lock_guard_drop_calls_unlock() {
@@ -30,10 +31,23 @@ async fn test_lock_guard_drop_calls_unlock() {
     // Drop the guard
     drop(guard);
 
+    // Wait for the lock to be released since unlock is async
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let count = manager
+                .lock_count("resource1", "owner1")
+                .await
+                .expect("Failed to get lock count");
+            if count == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("Lock release timeout");
+
     // Now owner2 should be able to acquire the lock
     let result = manager.lock("resource1", "owner2").await;
-    assert!(
-        result.is_ok(),
-        "Lock should have been released after guard was dropped"
-    );
+    assert!(result.is_ok(), "Lock should have been released after guard was dropped");
 }

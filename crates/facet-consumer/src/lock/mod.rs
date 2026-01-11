@@ -41,7 +41,37 @@ pub trait LockManager: Send + Sync {
     /// Returns LockAlreadyHeld if the lock is held by another owner.
     async fn lock(&self, identifier: &str, owner: &str) -> Result<LockGuard, LockError>;
 
-    /// Unlocks a resource held by the owner.
+    /// Retrieves the count of locks held by a specific owner for a given identifier.
+    ///
+    /// # Parameters
+    /// * `identifier` - Resource identifier
+    /// * `owner` - Owner identifier
+    ///
+    /// # Returns
+    /// - `Ok(u32)`: On success, returns the number of locks currently held by the specified owner for the
+    ///   given identifier.
+    /// - `Err(LockError)`: If an error occurs during the operation (e.g., communication failure, resource
+    ///   unavailability, or permission issues), returns a `LockError` describing the problem.
+    async fn lock_count(&self, identifier: &str, owner: &str) -> Result<u32, LockError>;
+
+    /// Releases all locks held by the owner. Returns normally if no locks are held.
+    ///
+    /// # Arguments
+    /// * `owner` - Owner identifier
+    async fn release_locks(&self, owner: &str) -> Result<(), LockError>;
+}
+
+/// Unlock operations trait for lock manager implementations.
+///
+/// This trait must be implemented alongside [`LockManager`] to provide unlock functionality.
+/// This method is used internally by [`LockGuard`]'s Drop implementation.
+///
+/// **Important**: While this trait is public to allow custom implementations, external users
+/// should rely on [`LockGuard`]'s Drop implementation for automatic lock release rather than
+/// calling these methods directly.
+#[async_trait]
+pub trait UnlockOps {
+    /// Unlocks a resource held by the owner (async).
     ///
     /// # Arguments
     /// * `identifier` - Resource identifier
@@ -51,23 +81,16 @@ pub trait LockManager: Send + Sync {
     /// Returns LockAlreadyHeld if the lock is held by another owner or LockNotFound if the resource is not locked by
     /// the owner, i.e., it has been released or expired
     async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError>;
-
-    /// Blocking version of unlock, used internally by LockGuard's Drop implementation.
-    ///
-    /// This method blocks the current thread until the unlock completes.
-    /// Implementations should use appropriate blocking mechanisms for their backend.
-    ///
-    /// # Arguments
-    /// * `identifier` - Resource identifier
-    /// * `owner` - Owner identifier
-    fn unlock_blocking(&self, identifier: &str, owner: &str) -> Result<(), LockError>;
-
-    /// Releases all locks held by the owner. Returns normally if no locks are held.
-    ///
-    /// # Arguments
-    /// * `owner` - Owner identifier
-    async fn release_locks(&self, owner: &str) -> Result<(), LockError>;
 }
+
+/// Helper trait that combines LockManager and UnlockOps for use in LockGuard.
+///
+/// This trait exists to work around Rust's limitation that you can't have multi-trait
+/// trait objects like `dyn LockManager + UnlockOps`.
+pub(crate) trait LockManagerInternal: LockManager + UnlockOps {}
+
+/// Blanket implementation: anything that implements both traits gets this for free
+impl<T: LockManager + UnlockOps> LockManagerInternal for T {}
 
 /// Guard that releases a lock when dropped.
 ///
@@ -88,17 +111,17 @@ pub trait LockManager: Send + Sync {
 /// # }
 /// ```
 pub struct LockGuard {
-    lock_manager: Arc<dyn LockManager>,
+    // Store the internal trait object that implements both LockManager and UnlockOps
+    lock_manager: Arc<dyn LockManagerInternal>,
     identifier: String,
     owner: String,
 }
 
 impl LockGuard {
-    pub(crate) fn new(
-        lock_manager: Arc<dyn LockManager>,
-        identifier: impl Into<String>,
-        owner: impl Into<String>,
-    ) -> Self {
+    pub(crate) fn new<T>(lock_manager: Arc<T>, identifier: impl Into<String>, owner: impl Into<String>) -> Self
+    where
+        T: LockManagerInternal + 'static,
+    {
         Self {
             lock_manager,
             identifier: identifier.into(),
@@ -108,12 +131,26 @@ impl LockGuard {
 }
 
 impl Drop for LockGuard {
+    /// Lock release is fire-and-forget via tokio::spawn. This is acceptable because locks have automatic expiration
+    /// (no indefinite holding)
     fn drop(&mut self) {
-        if let Err(e) = self.lock_manager.unlock_blocking(&self.identifier, &self.owner) {
-            warn!(
-                "Failed to release lock for identifier '{}' owned by '{}': {}",
-                self.identifier, self.owner, e
-            );
+        // Execute async unlock without blocking.
+        // This spawns the unlock operation to run asynchronously.
+        let lock_manager = self.lock_manager.clone();
+        let identifier = std::mem::take(&mut self.identifier);
+        let owner = std::mem::take(&mut self.owner);
+
+        // Drop if runtime is available, otherwise let the lock expire
+        if let Ok(_handle) = tokio::runtime::Handle::try_current() {
+            // Spawn the async unlock task
+            let _ = tokio::spawn(async move {
+                if let Err(e) = lock_manager.unlock(&identifier, &owner).await {
+                    warn!(
+                        "Failed to release lock for identifier '{}' owned by '{}': {}",
+                        identifier, owner, e
+                    );
+                }
+            });
         }
     }
 }

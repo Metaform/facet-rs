@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::lock::{LockError, LockGuard, LockManager};
+use crate::lock::{LockError, LockGuard, LockManager, UnlockOps};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
 use facet_common::util::{default_clock, Clock};
@@ -97,6 +97,29 @@ impl Default for MemoryLockManager {
 }
 
 #[async_trait]
+impl UnlockOps for MemoryLockManager {
+    async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
+        let mut locks = self.inner.locks.lock().unwrap();
+
+        if let Some(lock) = locks.get_mut(identifier) {
+            if lock.owner != owner {
+                return Err(LockError::lock_already_held(identifier, &lock.owner, owner));
+            }
+
+            lock.reentrant_count -= 1;
+
+            if lock.reentrant_count == 0 {
+                locks.remove(identifier);
+            }
+
+            return Ok(());
+        }
+
+        Err(LockError::lock_not_found(identifier, owner))
+    }
+}
+
+#[async_trait]
 impl LockManager for MemoryLockManager {
     async fn lock(&self, identifier: &str, owner: &str) -> Result<LockGuard, LockError> {
         let mut locks = self.inner.locks.lock().unwrap();
@@ -126,28 +149,16 @@ impl LockManager for MemoryLockManager {
         Ok(LockGuard::new(Arc::new(self.clone()), identifier, owner))
     }
 
-    async fn unlock(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
-        self.unlock_blocking(identifier, owner)
-    }
+    async fn lock_count(&self, identifier: &str, owner: &str) -> Result<u32, LockError> {
+        let locks = self.inner.locks.lock().unwrap();
 
-    fn unlock_blocking(&self, identifier: &str, owner: &str) -> Result<(), LockError> {
-        let mut locks = self.inner.locks.lock().unwrap();
-
-        if let Some(lock) = locks.get_mut(identifier) {
-            if lock.owner != owner {
-                return Err(LockError::lock_already_held(identifier, &lock.owner, owner));
+        if let Some(lock) = locks.get(identifier) {
+            if lock.owner == owner && !self.is_expired(lock, self.inner.timeout) {
+                return Ok(lock.reentrant_count as u32);
             }
-
-            lock.reentrant_count -= 1;
-
-            if lock.reentrant_count == 0 {
-                locks.remove(identifier);
-            }
-
-            return Ok(());
         }
 
-        Err(LockError::lock_not_found(identifier, owner))
+        Ok(0)
     }
 
     async fn release_locks(&self, owner: &str) -> Result<(), LockError> {

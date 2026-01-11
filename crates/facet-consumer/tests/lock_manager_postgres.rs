@@ -17,7 +17,7 @@ use chrono::{TimeDelta, Utc};
 use facet_common::util::{Clock, MockClock};
 use facet_consumer::lock::postgres::PostgresLockManager;
 use facet_consumer::lock::LockError::{LockAlreadyHeld, LockNotFound};
-use facet_consumer::lock::LockManager;
+use facet_consumer::lock::{LockManager, UnlockOps};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -81,7 +81,6 @@ async fn test_postgres_lock_reentrant_unlock() {
     let _guard = manager.lock(&identifier, owner1).await.unwrap();
 
     // The first unlock should NOT release the lock completely
-    drop(_guard);
     manager.unlock(&identifier, owner1).await.unwrap();
 
     // Owner2 should still not be able to acquire (lock still held by owner1)
@@ -139,7 +138,7 @@ async fn test_postgres_lock_concurrent_unlock_race() {
             );
         }
 
-        // Clean up - ensure lock is released
+        // Clean up - ensure lock is released (ignore errors if already released)
         let _ = manager.unlock(&id, owner).await;
     }
 }
@@ -156,7 +155,6 @@ async fn test_postgres_lock_unlock_idempotency() {
 
     // Acquire and release lock
     let _guard = manager.lock(&identifier, owner).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, owner).await.unwrap();
 
     // Second unlock should fail - lock already released
@@ -188,7 +186,6 @@ async fn test_postgres_unlock_success() {
     let _guard = manager.lock(&identifier, owner).await.unwrap();
 
     // Unlock successfully
-    drop(_guard);
     manager.unlock(&identifier, owner).await.unwrap();
 
     // Different owner can now acquire the lock
@@ -210,7 +207,6 @@ async fn test_postgres_unlock_wrong_owner() {
     let _guard = manager.lock(&identifier, owner1).await.unwrap();
 
     // Owner2 tries to unlock - should fail
-    drop(_guard);
     let result = manager.unlock(&identifier, owner2).await;
     assert!(result.is_err());
 
@@ -353,16 +349,13 @@ async fn test_postgres_lock_sequence() {
 
     // Sequence: lock -> unlock -> lock (different owner) -> unlock -> lock (first owner again)
     let _guard = manager.lock(&identifier, owner).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, owner).await.unwrap();
 
     let owner2 = "owner2";
     let _guard = manager.lock(&identifier, owner2).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, owner2).await.unwrap();
 
     let _guard = manager.lock(&identifier, owner).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, owner).await.unwrap();
 }
 
@@ -376,7 +369,6 @@ async fn test_postgres_lock_with_special_characters() {
     let owner = "owner@example.com";
 
     let _guard = manager.lock(&identifier, owner).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, owner).await.unwrap();
 }
 
@@ -390,7 +382,6 @@ async fn test_postgres_lock_with_long_identifiers() {
     let owner = "b".repeat(255);
 
     let _guard = manager.lock(&identifier, &owner).await.unwrap();
-    drop(_guard);
     manager.unlock(&identifier, &owner).await.unwrap();
 }
 
@@ -602,7 +593,7 @@ async fn test_postgres_lock_race_condition_on_concurrent_release() {
             // Other errors are acceptable (LockAlreadyHeld is expected)
         }
 
-        // Clean up - only clean up what was actually acquired, ignore errors
+        // Clean up - only clean up what was actually acquired, ignore errors if already released
         let _ = manager.unlock(&id, "owner1").await;
         let _ = manager.unlock(&id, "owner2").await;
     }
@@ -633,7 +624,7 @@ async fn test_postgres_lock_heavy_contention() {
                         // Hold briefly
                         tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
                         // Release
-                        let _ = manager_clone.unlock(&id_clone, &owner).await;
+                        let _ = manager_clone.unlock(&id_clone, &owner);
                     }
                     Err(e) => {
                         let error_msg = e.to_string();
@@ -832,3 +823,205 @@ async fn test_postgres_release_locks_concurrent() {
     assert!(manager.lock(&id1, "owner3").await.is_ok());
     assert!(manager.lock(&id2, "owner3").await.is_ok());
 }
+
+#[tokio::test]
+async fn test_postgres_lock_count_nonexistent_lock() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_single_lock() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard = manager.lock(&identifier, "owner1").await.unwrap();
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_reentrant_locks() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard1 = manager.lock(&identifier, "owner1").await.unwrap();
+    let _guard2 = manager.lock(&identifier, "owner1").await.unwrap();
+    let _guard3 = manager.lock(&identifier, "owner1").await.unwrap();
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 3);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_wrong_owner() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard = manager.lock(&identifier, "owner1").await.unwrap();
+
+    // Check count for a different owner - should be 0
+    let count = manager
+        .lock_count(&identifier, "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_after_release() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard = manager.lock(&identifier, "owner1").await.unwrap();
+
+    manager.release_locks("owner1").await.expect("Release failed");
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_after_partial_unlock() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard1 = manager.lock(&identifier, "owner1").await.unwrap();
+    let _guard2 = manager.lock(&identifier, "owner1").await.unwrap();
+    let _guard3 = manager.lock(&identifier, "owner1").await.unwrap();
+
+    // Unlock once
+    manager.unlock(&identifier, "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 2);
+
+    // Unlock again
+    manager.unlock(&identifier, "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Final unlock
+    manager.unlock(&identifier, "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_expired_lock() {
+    let (pool, _container) = setup_postgres_container().await;
+
+    let initial_time = Utc::now();
+    let mock_clock = Arc::new(MockClock::new(initial_time));
+    let manager = PostgresLockManager::builder()
+        .pool(pool.clone())
+        .timeout(TimeDelta::milliseconds(20))
+        .clock(mock_clock.clone() as Arc<dyn Clock>)
+        .build();
+    manager.initialize().await.unwrap();
+
+    let identifier = Uuid::new_v4().to_string();
+    let _guard = manager.lock(&identifier, "owner1").await.unwrap();
+
+    // Before expiration
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Advance time beyond timeout
+    mock_clock.advance(TimeDelta::milliseconds(60));
+
+    // After expiration, the count should be 0
+    let count = manager
+        .lock_count(&identifier, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_postgres_lock_count_multiple_resources_different_owners() {
+    let (pool, _container) = setup_postgres_container().await;
+    let manager = PostgresLockManager::builder().pool(pool).build();
+    manager.initialize().await.unwrap();
+
+    let id1 = Uuid::new_v4().to_string();
+    let id2 = Uuid::new_v4().to_string();
+    let id3 = Uuid::new_v4().to_string();
+
+    let _guard1 = manager.lock(&id1, "owner1").await.unwrap();
+    let _guard2 = manager.lock(&id1, "owner1").await.unwrap();
+    let _guard3 = manager.lock(&id2, "owner2").await.unwrap();
+    let _guard4 = manager.lock(&id3, "owner1").await.unwrap();
+
+    // Check owner1 has 2 locks on id1
+    let count = manager
+        .lock_count(&id1, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 2);
+
+    // Check owner2 has no locks on id1
+    let count = manager
+        .lock_count(&id1, "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+
+    // Check owner2 has 1 lock on id2
+    let count = manager
+        .lock_count(&id2, "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Check owner1 has 1 lock on id3
+    let count = manager
+        .lock_count(&id3, "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+}
+
+

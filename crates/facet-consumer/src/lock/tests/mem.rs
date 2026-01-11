@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::lock::{LockError, LockManager, MemoryLockManager};
+use crate::lock::{LockError, LockManager, MemoryLockManager, UnlockOps};
 use chrono::{TimeDelta, Utc};
 use facet_common::util::{Clock, MockClock};
 use std::sync::Arc;
@@ -149,10 +149,10 @@ async fn test_multiple_resources() {
 #[tokio::test]
 async fn test_lock_acquire_after_release() {
     let manager = MemoryLockManager::new();
-    let guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
+    let _guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
 
     // Drop the guard to release the lock
-    drop(guard);
+    manager.release_locks("owner1").await.expect("Release failed");
 
     let result = manager.lock("resource1", "owner2").await;
     assert!(result.is_ok());
@@ -399,4 +399,167 @@ async fn test_release_locks_empty_manager() {
     // Releasing locks when no locks exist should succeed (no-op)
     let result = manager.release_locks("owner1").await;
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_lock_count_nonexistent_lock() {
+    let manager = MemoryLockManager::new();
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_lock_count_single_lock() {
+    let manager = MemoryLockManager::new();
+    let _guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn test_lock_count_reentrant_locks() {
+    let manager = MemoryLockManager::new();
+    let _guard1 = manager.lock("resource1", "owner1").await.expect("First lock failed");
+    let _guard2 = manager.lock("resource1", "owner1").await.expect("Second lock failed");
+    let _guard3 = manager.lock("resource1", "owner1").await.expect("Third lock failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 3);
+}
+
+#[tokio::test]
+async fn test_lock_count_wrong_owner() {
+    let manager = MemoryLockManager::new();
+    let _guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
+
+    // Check count for a different owner - should be 0
+    let count = manager
+        .lock_count("resource1", "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_lock_count_after_release() {
+    let manager = MemoryLockManager::new();
+    let _guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
+
+    manager.release_locks("owner1").await.expect("Release failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_lock_count_after_partial_unlock() {
+    let manager = MemoryLockManager::new();
+    let _guard1 = manager.lock("resource1", "owner1").await.expect("First lock failed");
+    let _guard2 = manager.lock("resource1", "owner1").await.expect("Second lock failed");
+    let _guard3 = manager.lock("resource1", "owner1").await.expect("Third lock failed");
+
+    // Unlock once
+    manager.unlock("resource1", "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 2);
+
+    // Unlock again
+    manager.unlock("resource1", "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Final unlock
+    manager.unlock("resource1", "owner1").await.expect("Unlock failed");
+
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_lock_count_expired_lock() {
+    let clock = Arc::new(MockClock::new(Utc::now()));
+    let manager = Arc::new(MemoryLockManager::with_timeout_and_clock(
+        TimeDelta::milliseconds(20),
+        clock.clone() as Arc<dyn Clock>,
+    ));
+
+    let _guard = manager.lock("resource1", "owner1").await.expect("Lock failed");
+
+    // Before expiration
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Advance time beyond timeout
+    clock.advance(TimeDelta::milliseconds(60));
+
+    // After expiration, the count should be 0
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn test_lock_count_multiple_resources_different_owners() {
+    let manager = MemoryLockManager::new();
+    let _guard1 = manager.lock("resource1", "owner1").await.expect("Lock 1 failed");
+    let _guard2 = manager.lock("resource1", "owner1").await.expect("Lock 1 reentrant failed");
+    let _guard3 = manager.lock("resource2", "owner2").await.expect("Lock 2 failed");
+    let _guard4 = manager.lock("resource3", "owner1").await.expect("Lock 3 failed");
+
+    // Check owner1 has 2 locks on resource1
+    let count = manager
+        .lock_count("resource1", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 2);
+
+    // Check owner2 has no locks on resource1
+    let count = manager
+        .lock_count("resource1", "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 0);
+
+    // Check owner2 has 1 lock on resource2
+    let count = manager
+        .lock_count("resource2", "owner2")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
+
+    // Check owner1 has 1 lock on resource3
+    let count = manager
+        .lock_count("resource3", "owner1")
+        .await
+        .expect("Failed to get lock count");
+    assert_eq!(count, 1);
 }
