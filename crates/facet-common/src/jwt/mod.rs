@@ -16,6 +16,7 @@ mod tests;
 pub mod jwtutils;
 
 use crate::context::ParticipantContext;
+use crate::util::{Clock, default_clock};
 use bon::Builder;
 use jsonwebtoken::dangerous::insecure_decode;
 use jsonwebtoken::errors::ErrorKind;
@@ -25,7 +26,6 @@ use serde_json::{Map, Value};
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use crate::util::{default_clock, Clock};
 
 /// JWT token claims structure.
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
@@ -151,9 +151,11 @@ pub struct LocalJwtGenerator {
 impl LocalJwtGenerator {
     fn load_encoding_key(&self, key_format: &KeyFormat, key_bytes: &[u8]) -> Result<EncodingKey, JwtGenerationError> {
         match (&self.signing_algorithm, key_format) {
-            (SigningAlgorithm::EdDSA, KeyFormat::PEM) => EncodingKey::from_ed_pem(key_bytes).map_err(|e| JwtGenerationError::GenerationError(format!("Failed to load Ed25519 PEM key: {}", e))),
+            (SigningAlgorithm::EdDSA, KeyFormat::PEM) => EncodingKey::from_ed_pem(key_bytes)
+                .map_err(|e| JwtGenerationError::GenerationError(format!("Failed to load Ed25519 PEM key: {}", e))),
             (SigningAlgorithm::EdDSA, KeyFormat::DER) => Ok(EncodingKey::from_ed_der(key_bytes)),
-            (SigningAlgorithm::RS256, KeyFormat::PEM) => EncodingKey::from_rsa_pem(key_bytes).map_err(|e| JwtGenerationError::GenerationError(format!("Failed to load RSA PEM key: {}", e))),
+            (SigningAlgorithm::RS256, KeyFormat::PEM) => EncodingKey::from_rsa_pem(key_bytes)
+                .map_err(|e| JwtGenerationError::GenerationError(format!("Failed to load RSA PEM key: {}", e))),
             (SigningAlgorithm::RS256, KeyFormat::DER) => Ok(EncodingKey::from_rsa_der(key_bytes)),
         }
     }
@@ -174,7 +176,8 @@ impl JwtGenerator for LocalJwtGenerator {
         let mut claims = TokenClaims { ..claims.clone() };
         claims.iss = key_result.iss;
         claims.iat = self.clock.now().timestamp();
-        encode(&theader, &claims, &encoding_key).map_err(|e| JwtGenerationError::GenerationError(format!("JWT encoding failed: {}", e)))
+        encode(&theader, &claims, &encoding_key)
+            .map_err(|e| JwtGenerationError::GenerationError(format!("JWT encoding failed: {}", e)))
     }
 }
 
@@ -203,7 +206,8 @@ impl LocalJwtVerifier {
                 JwtVerificationError::VerificationFailed(format!("Failed to load Ed25519 PEM key: {}", e))
             }),
             (SigningAlgorithm::EdDSA, KeyFormat::DER) => Ok(DecodingKey::from_ed_der(&key_material.key)),
-            (SigningAlgorithm::RS256, KeyFormat::PEM) => DecodingKey::from_rsa_pem(&key_material.key).map_err(|e| JwtVerificationError::VerificationFailed(format!("Failed to load RSA PEM key: {}", e))),
+            (SigningAlgorithm::RS256, KeyFormat::PEM) => DecodingKey::from_rsa_pem(&key_material.key)
+                .map_err(|e| JwtVerificationError::VerificationFailed(format!("Failed to load RSA PEM key: {}", e))),
             (SigningAlgorithm::RS256, KeyFormat::DER) => Ok(DecodingKey::from_rsa_der(&key_material.key)),
         }
     }
