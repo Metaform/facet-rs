@@ -192,7 +192,7 @@ fn test_expired_token_validation_pem_eddsa() {
 }
 
 #[test]
-fn test_leeway_allows_recently_expired_token_pem() {
+fn test_leeway_allows_recently_expired_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -238,7 +238,7 @@ fn test_leeway_allows_recently_expired_token_pem() {
 }
 
 #[test]
-fn test_leeway_rejects_token_expired_beyond_leeway_pem() {
+fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
