@@ -221,7 +221,7 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
-    // Verifier with 30-second leeway (default) should accept token expired 20 seconds ago
+    // Verifier with 30-second leeway should accept token expired 20 seconds ago
     let verifier = create_test_verifier_with_leeway(
         keypair.public_key.clone(),
         KeyFormat::PEM,
@@ -337,27 +337,33 @@ fn test_malformed_token_pem_eddsa() {
         SigningAlgorithm::EdDSA,
     );
 
-    let malformed_tokens = vec![
-        "not.a.token",
-        "invalid-token",
-        "",
-        "header.payload", // Missing signature
-    ];
-
     let pc = &ParticipantContext::builder()
         .identifier("participant1")
         .audience("audience1")
         .build();
 
-    for malformed_token in malformed_tokens {
-        let result = verifier.verify_token(pc, malformed_token);
-        assert!(result.is_err(), "Token '{}' should fail validation", malformed_token);
-        // Malformed tokens can return either InvalidFormat or VerificationFailed
-        match result.unwrap_err() {
-            JwtVerificationError::InvalidFormat | JwtVerificationError::VerificationFailed(_) => {}
-            other => panic!("Expected InvalidFormat or VerificationFailed, got {:?}", other),
-        }
+    // Empty token string
+    let result = verifier.verify_token(pc, "");
+    assert!(result.is_err(), "Empty token should fail validation");
+    assert!(matches!(result.unwrap_err(), JwtVerificationError::InvalidFormat));
+
+    // Token with only one dot (missing signature part)
+    let result = verifier.verify_token(pc, "header.payload");
+    assert!(result.is_err(), "Token missing signature should fail validation");
+    assert!(matches!(result.unwrap_err(), JwtVerificationError::InvalidFormat));
+
+    // Token with invalid base64 in parts
+    let result = verifier.verify_token(pc, "not.a.token");
+    assert!(result.is_err(), "Token with invalid base64 should fail validation");
+    match result.unwrap_err() {
+        JwtVerificationError::InvalidFormat | JwtVerificationError::VerificationFailed(_) => {}
+        other => panic!("Expected InvalidFormat or VerificationFailed, got {:?}", other),
     }
+
+    // Token with no dots at all
+    let result = verifier.verify_token(pc, "invalid-token");
+    assert!(result.is_err(), "Token with no dots should fail validation");
+    assert!(matches!(result.unwrap_err(), JwtVerificationError::InvalidFormat));
 }
 
 #[test]
