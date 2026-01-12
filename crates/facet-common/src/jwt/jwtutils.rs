@@ -10,12 +10,14 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::jwt::JwtGenerationError;
+use bon::Builder;
+use crate::jwt::{JwtGenerationError, JwtVerificationError, KeyFormat, KeyMaterial, SigningKeyResolver, VerificationKeyResolver};
 use ed25519_dalek::SigningKey;
 use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
 use rand::Rng;
 use rsa::rand_core::OsRng as RsaOsRng;
 use rsa::{RsaPrivateKey, RsaPublicKey};
+use crate::context::ParticipantContext;
 
 #[derive(Debug, Clone)]
 pub struct Ed25519Keypair {
@@ -95,4 +97,47 @@ pub fn generate_ed25519_keypair_pem() -> Result<Ed25519Keypair, JwtGenerationErr
         private_key,
         public_key,
     })
+}
+
+#[derive(Builder)]
+pub struct StaticVerificationKeyResolver {
+    pub key: Vec<u8>,
+    #[builder(default = KeyFormat::PEM)]
+    key_format: KeyFormat,
+}
+
+impl VerificationKeyResolver for StaticVerificationKeyResolver {
+    fn resolve_key(&self, iss: &str, kid: &str) -> Result<KeyMaterial, JwtVerificationError> {
+        Ok(KeyMaterial::builder()
+            .key(self.key.clone())
+            .key_format(self.key_format)
+            .iss(iss)
+            .kid(kid)
+            .build())
+    }
+}
+
+#[derive(Builder)]
+pub struct StaticSigningKeyResolver {
+    pub key: Vec<u8>,
+
+    #[builder(into)]
+    pub iss: String,
+
+    #[builder(into)]
+    pub kid: String,
+
+    #[builder(default = KeyFormat::PEM)]
+    key_format: KeyFormat,
+}
+
+impl SigningKeyResolver for StaticSigningKeyResolver {
+    fn resolve_key(&self, _: &ParticipantContext) -> Result<KeyMaterial, JwtGenerationError> {
+        Ok(KeyMaterial::builder()
+            .key_format(self.key_format)
+            .key(self.key.clone())
+            .iss(self.iss.clone())
+            .kid(self.kid.clone())
+            .build())
+    }
 }

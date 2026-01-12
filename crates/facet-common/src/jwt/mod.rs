@@ -17,18 +17,21 @@ pub mod jwtutils;
 
 use crate::context::ParticipantContext;
 use bon::Builder;
+use jsonwebtoken::dangerous::insecure_decode;
 use jsonwebtoken::errors::ErrorKind;
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, decode_header, encode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
 
+/// JWT token claims structure.
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 pub struct TokenClaims {
     #[builder(into)]
     pub sub: String,
+    #[builder(default)]
     #[builder(into)]
     pub iss: String,
     #[builder(into)]
@@ -40,6 +43,7 @@ pub struct TokenClaims {
     pub custom: Map<String, Value>,
 }
 
+/// Generates a JWT using the key material associated with a participant context.
 pub trait JwtGenerator: Send + Sync {
     fn generate_token(
         &self,
@@ -48,13 +52,14 @@ pub trait JwtGenerator: Send + Sync {
     ) -> Result<String, JwtGenerationError>;
 }
 
+/// Errors that can occur during JWT generation.
 #[derive(Debug, Error)]
 pub enum JwtGenerationError {
     #[error("Failed to generate token: {0}")]
     GenerationError(String),
 }
 
-/// Verifies JWT tokens and validates claims.
+/// Verifies a JWT and validates claims for the participant context.
 pub trait JwtVerifier: Send + Sync {
     fn verify_token(
         &self,
@@ -86,7 +91,7 @@ pub enum SigningAlgorithm {
     RS256,
 }
 
-/// Key formats supported by the JWT generator.
+/// Supported key formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyFormat {
     PEM,
@@ -102,21 +107,37 @@ impl From<SigningAlgorithm> for Algorithm {
     }
 }
 
-/// JWT generator for creating and verifying JWT tokens in-process.
-#[derive(Builder)]
-pub struct LocalJwtGenerator {
+/// Resolves signing keys for the participant context.
+pub trait SigningKeyResolver: Send + Sync {
+    fn resolve_key(&self, participant_context: &ParticipantContext) -> Result<KeyMaterial, JwtGenerationError>;
+}
+
+#[derive(Builder, Clone)]
+pub struct KeyMaterial {
     #[builder(default = KeyFormat::PEM)]
     key_format: KeyFormat,
 
-    signing_key_resolver: Arc<dyn Fn(&ParticipantContext) -> Vec<u8> + Send + Sync>,
+    pub key: Vec<u8>,
+
+    #[builder(into)]
+    pub iss: String,
+
+    #[builder(into)]
+    pub kid: String,
+}
+
+/// JWT generator for creating and verifying JWTs in-process.
+#[derive(Builder)]
+pub struct LocalJwtGenerator {
+    signing_key_resolver: Arc<dyn SigningKeyResolver>,
 
     #[builder(default = SigningAlgorithm::EdDSA)]
     signing_algorithm: SigningAlgorithm,
 }
 
 impl LocalJwtGenerator {
-    fn load_encoding_key(&self, key_bytes: &[u8]) -> Result<EncodingKey, JwtGenerationError> {
-        match (&self.signing_algorithm, &self.key_format) {
+    fn load_encoding_key(&self, key_format: &KeyFormat, key_bytes: &[u8]) -> Result<EncodingKey, JwtGenerationError> {
+        match (&self.signing_algorithm, key_format) {
             (SigningAlgorithm::EdDSA, KeyFormat::PEM) => EncodingKey::from_ed_pem(key_bytes)
                 .map_err(|e| JwtGenerationError::GenerationError(format!("Failed to load Ed25519 PEM key: {}", e))),
             (SigningAlgorithm::EdDSA, KeyFormat::DER) => Ok(EncodingKey::from_ed_der(key_bytes)),
@@ -133,18 +154,23 @@ impl JwtGenerator for LocalJwtGenerator {
         participant_context: &ParticipantContext,
         claims: TokenClaims,
     ) -> Result<String, JwtGenerationError> {
-        let key_bytes = (self.signing_key_resolver)(participant_context);
-        let algorithm = self.signing_algorithm.into();
-        let encoding_key = self.load_encoding_key(&key_bytes)?;
+        let key_result = self.signing_key_resolver.resolve_key(participant_context)?;
 
-        encode(&Header::new(algorithm), &claims, &encoding_key)
+        let algorithm = self.signing_algorithm.into();
+        let encoding_key = self.load_encoding_key(&key_result.key_format, &key_result.key)?;
+        let mut theader = Header::new(algorithm);
+        theader.kid = Some(key_result.kid);
+        let mut claims = TokenClaims { ..claims.clone() };
+        claims.iss = key_result.iss;
+
+        encode(&theader, &claims, &encoding_key)
             .map_err(|e| JwtGenerationError::GenerationError(format!("JWT encoding failed: {}", e)))
     }
 }
 
 /// Resolves public keys for JWT verification.
 pub trait VerificationKeyResolver: Send + Sync {
-    fn resolve_verification_key(&self, iss: &str, kid: &str) -> Result<Vec<u8>, JwtVerificationError>;
+    fn resolve_key(&self, iss: &str, kid: &str) -> Result<KeyMaterial, JwtVerificationError>;
 }
 
 /// Verifies JWTs in-process.
@@ -152,9 +178,6 @@ pub trait VerificationKeyResolver: Send + Sync {
 pub struct LocalJwtVerifier {
     #[builder(default = 300)] // Five minutes
     leeway_seconds: u64, // JWT exp claim is in seconds
-
-    #[builder(default = KeyFormat::PEM)]
-    key_format: KeyFormat,
 
     verification_key_resolver: Arc<dyn VerificationKeyResolver>,
 
@@ -164,15 +187,15 @@ pub struct LocalJwtVerifier {
 
 impl LocalJwtVerifier {
     fn load_decoding_key(&self, iss: &str, kid: &str) -> Result<DecodingKey, JwtVerificationError> {
-        let key_bytes = self.verification_key_resolver.resolve_verification_key(iss, kid)?;
-        match (&self.signing_algorithm, &self.key_format) {
-            (SigningAlgorithm::EdDSA, KeyFormat::PEM) => DecodingKey::from_ed_pem(&key_bytes).map_err(|e| {
+        let key_material = self.verification_key_resolver.resolve_key(iss, kid)?;
+        match (&self.signing_algorithm, key_material.key_format) {
+            (SigningAlgorithm::EdDSA, KeyFormat::PEM) => DecodingKey::from_ed_pem(&key_material.key).map_err(|e| {
                 JwtVerificationError::VerificationFailed(format!("Failed to load Ed25519 PEM key: {}", e))
             }),
-            (SigningAlgorithm::EdDSA, KeyFormat::DER) => Ok(DecodingKey::from_ed_der(&key_bytes)),
-            (SigningAlgorithm::RS256, KeyFormat::PEM) => DecodingKey::from_rsa_pem(&key_bytes)
+            (SigningAlgorithm::EdDSA, KeyFormat::DER) => Ok(DecodingKey::from_ed_der(&key_material.key)),
+            (SigningAlgorithm::RS256, KeyFormat::PEM) => DecodingKey::from_rsa_pem(&key_material.key)
                 .map_err(|e| JwtVerificationError::VerificationFailed(format!("Failed to load RSA PEM key: {}", e))),
-            (SigningAlgorithm::RS256, KeyFormat::DER) => Ok(DecodingKey::from_rsa_der(&key_bytes)),
+            (SigningAlgorithm::RS256, KeyFormat::DER) => Ok(DecodingKey::from_rsa_der(&key_material.key)),
         }
     }
 }
@@ -183,12 +206,23 @@ impl JwtVerifier for LocalJwtVerifier {
         participant_context: &ParticipantContext,
         token: &str,
     ) -> Result<TokenClaims, JwtVerificationError> {
-        // TODO parse JWT and pass in ISS and KID
-        let decoding_key = self.load_decoding_key("", "")?;
+        // Extract kid from header (without verification)
+        let header = decode_header(token).map_err(|_| JwtVerificationError::InvalidFormat)?;
+
+        let kid = header.kid.ok_or_else(|| JwtVerificationError::InvalidFormat)?;
+
+        // Extract iss from payload (without verification, safe because we verify below)
+        let unverified = insecure_decode::<TokenClaims>(token).map_err(|_| JwtVerificationError::InvalidFormat)?;
+
+        let iss = &unverified.claims.iss;
+
+        // Now load the decoding key with the extracted iss and kid
+        let decoding_key = self.load_decoding_key(iss, &kid)?;
         let mut validation = Validation::new(self.signing_algorithm.into());
         validation.leeway = self.leeway_seconds;
         validation.aud = Some(HashSet::from([participant_context.audience.clone()]));
 
+        // Perform the actual cryptographic verification with the correct key
         let token_data = decode::<TokenClaims>(token, &decoding_key, &validation).map_err(|e| match e.kind() {
             ErrorKind::ExpiredSignature => JwtVerificationError::TokenExpired,
             ErrorKind::InvalidSignature => JwtVerificationError::InvalidSignature,

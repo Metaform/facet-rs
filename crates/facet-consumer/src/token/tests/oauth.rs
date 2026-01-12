@@ -18,6 +18,7 @@ use facet_common::jwt::jwtutils::generate_ed25519_keypair_pem;
 use std::sync::Arc;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+use facet_common::jwt::jwtutils::StaticSigningKeyResolver;
 
 #[tokio::test]
 async fn test_refresh_token_success() {
@@ -26,9 +27,17 @@ async fn test_refresh_token_success() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate keypair");
     let private_key = keypair.private_key.clone();
 
+    let signing_resolver = Arc::new(
+        StaticSigningKeyResolver::builder()
+            .key(private_key.clone())
+            .iss("issuer-rsa")
+            .kid("did:web:example.com#key-1")
+            .build(),
+    );
+
     let jwt_generator = Arc::new(
         LocalJwtGenerator::builder()
-            .signing_key_resolver(Arc::new(move |_| private_key.clone()))
+            .signing_key_resolver(signing_resolver)
             .build(),
     );
 
