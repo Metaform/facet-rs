@@ -10,15 +10,15 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::token::TokenClient;
 use crate::token::oauth::OAuth2TokenClient;
+use crate::token::TokenClient;
 use facet_common::context::ParticipantContext;
-use facet_common::jwt::LocalJwtGenerator;
 use facet_common::jwt::jwtutils::generate_ed25519_keypair_pem;
-use std::sync::Arc;
-use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 use facet_common::jwt::jwtutils::StaticSigningKeyResolver;
+use facet_common::jwt::LocalJwtGenerator;
+use std::sync::Arc;
+use wiremock::matchers::{body_string_contains, header_regex, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
 async fn test_refresh_token_success() {
@@ -30,7 +30,7 @@ async fn test_refresh_token_success() {
     let signing_resolver = Arc::new(
         StaticSigningKeyResolver::builder()
             .key(private_key.clone())
-            .iss("issuer-rsa")
+            .iss("did:web:example.com")
             .kid("did:web:example.com#key-1")
             .build(),
     );
@@ -48,8 +48,9 @@ async fn test_refresh_token_success() {
 
     Mock::given(method("POST"))
         .and(path("/token/refresh"))
-        .and(query_param("grant_type", "refresh_token"))
-        .and(query_param("refresh_token", "old_refresh_token"))
+        .and(header_regex("Authorization", r"^Bearer .+$"))
+        .and(body_string_contains("grant_type=refresh_token"))
+        .and(body_string_contains("refresh_token=old_refresh_token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
@@ -65,7 +66,7 @@ async fn test_refresh_token_success() {
 
     let refresh_endpoint = format!("{}/token/refresh", mock_server.uri());
     let token_data = client
-        .refresh_token(pc, "test-identifier", "old_refresh_token", &refresh_endpoint)
+        .refresh_token(pc, "test-identifier", "old_access_token", "old_refresh_token", &refresh_endpoint)
         .await
         .expect("Token refresh should succeed");
 

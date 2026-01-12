@@ -122,10 +122,11 @@ async fn test_get_token_expiring_soon_triggers_refresh() {
                 .audience("audience1")
                 .build()),
             eq("identifier1"),
+            eq("old_token"),
             eq("old_refresh"),
             eq("https://example.com/refresh"),
         )
-        .returning(|_, _, _, _| {
+        .returning(|_, _, _, _, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
                 identifier: "identifier1".to_string(),
@@ -202,7 +203,7 @@ async fn test_get_token_expired_triggers_refresh() {
         .returning(|_| Ok(()));
 
     let mut token_client = MockTokenClient::new();
-    token_client.expect_refresh_token().once().returning(|_, _, _, _| {
+    token_client.expect_refresh_token().once().returning(|_, _, _, _, _| {
         Ok(TokenData {
             participant_context: "participant1".to_string(),
             identifier: "identifier1".to_string(),
@@ -276,7 +277,7 @@ async fn test_refresh_updates_stored_token() {
         .returning(|_| Ok(()));
 
     let mut token_client = MockTokenClient::new();
-    token_client.expect_refresh_token().once().returning(|_, _, _, _| {
+    token_client.expect_refresh_token().once().returning(|_, _, _, _, _| {
         Ok(TokenData {
             participant_context: "participant1".to_string(),
             identifier: "identifier1".to_string(),
@@ -345,7 +346,7 @@ async fn test_refresh_failure_returns_error() {
     token_client
         .expect_refresh_token()
         .once()
-        .returning(|_, _, _, _| Err(TokenError::network_error("Refresh endpoint unavailable")));
+        .returning(|_, _, _, _, _| Err(TokenError::network_error("Refresh endpoint unavailable")));
 
     let token_api = TokenClientApi::builder()
         .lock_manager(Arc::new(lock_manager))
@@ -409,7 +410,7 @@ async fn test_lock_acquired_during_refresh() {
         .returning(|_| Ok(()));
 
     let mut token_client = MockTokenClient::new();
-    token_client.expect_refresh_token().once().returning(|_, _, _, _| {
+    token_client.expect_refresh_token().once().returning(|_, _, _, _, _| {
         Ok(TokenData {
             participant_context: "participant1".to_string(),
             identifier: "identifier1".to_string(),
@@ -591,7 +592,7 @@ async fn test_refresh_with_custom_refresh_threshold() {
         .returning(|_| Ok(()));
 
     let mut token_client = MockTokenClient::new();
-    token_client.expect_refresh_token().once().returning(|_, _, _, _| {
+    token_client.expect_refresh_token().once().returning(|_, _, _, _, _| {
         Ok(TokenData {
             participant_context: "participant1".to_string(),
             identifier: "identifier1".to_string(),
@@ -689,10 +690,11 @@ async fn test_multiple_tokens_independent_refresh() {
                 .audience("audience1")
                 .build()),
             eq("token1"),
+            eq("token1"),
             eq("refresh1"),
             eq("https://example.com/refresh"),
         )
-        .returning(|_, _, _, _| {
+        .returning(|_, _, _, _, _| {
             Ok(TokenData {
                 participant_context: "participant1".to_string(),
                 identifier: "token1".to_string(),

@@ -46,7 +46,7 @@ mock! {
 
     #[async_trait::async_trait]
     impl TokenClient for TokenClient {
-        async fn refresh_token(&self, participant_context: &ParticipantContext, endpoint_identifier: &str, refresh_token: &str, refresh_endpoint: &str) -> Result<TokenData, TokenError>;
+        async fn refresh_token(&self, participant_context: &ParticipantContext, endpoint_identifier: &str, access_token: &str, refresh_token: &str, refresh_endpoint: &str) -> Result<TokenData, TokenError>;
     }
 }
 

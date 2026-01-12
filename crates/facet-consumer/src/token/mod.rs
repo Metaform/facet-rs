@@ -79,6 +79,7 @@ impl TokenClientApi {
                 .refresh_token(
                     participant_context,
                     identifier,
+                    &data.token,
                     &data.refresh_token,
                     &data.refresh_endpoint,
                 )
@@ -135,6 +136,7 @@ pub trait TokenClient: Send + Sync {
         &self,
         participant_context: &ParticipantContext,
         endpoint_identifier: &str,
+        access_token: &str,
         refresh_token: &str,
         refresh_endpoint: &str,
     ) -> Result<TokenData, TokenError>;

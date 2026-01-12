@@ -741,3 +741,49 @@ fn test_generator_sets_iat_automatically_pem_eddsa() {
         verified_claims.iat
     );
 }
+
+
+#[test]
+fn test_kid_and_iss_are_set_correctly_in_generated_token() {
+    let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
+
+    let expected_iss = "did:web:example.com";
+    let expected_kid = "did:web:example.com#key-1";
+
+    let generator = create_test_generator(
+        keypair.private_key,
+        expected_iss,
+        expected_kid,
+        KeyFormat::PEM,
+        SigningAlgorithm::EdDSA,
+    );
+
+    let now = Utc::now().timestamp();
+
+    let claims = TokenClaims::builder()
+        .sub("user-id-123")
+        .iss("user-id-123") // This will be overwritten by the generator
+        .aud("audience1")
+        .exp(now + 10000)
+        .build();
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant1")
+        .audience("audience1")
+        .build();
+
+    let token = generator
+        .generate_token(pc, claims)
+        .expect("Token generation should succeed");
+
+    // Verify kid in header
+    let header = jsonwebtoken::decode_header(token.as_str())
+        .expect("Should be able to decode header");
+    assert_eq!(header.kid, Some(expected_kid.to_string()), "kid header should match");
+
+    // Verify iss in claims
+    let unverified_claims = jsonwebtoken::dangerous::insecure_decode::<TokenClaims>(token.as_str())
+        .expect("Should be able to decode claims")
+        .claims;
+    assert_eq!(unverified_claims.iss, expected_iss, "iss claim should match");
+}

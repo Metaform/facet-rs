@@ -97,6 +97,7 @@ impl facet_consumer::token::TokenClient for MockTokenClient {
         &self,
         _participant_context: &ParticipantContext,
         _endpoint_identifier: &str,
+        _access_token: &str,
         _refresh_token: &str,
         _refresh_endpoint: &str,
     ) -> Result<TokenData, TokenError> {

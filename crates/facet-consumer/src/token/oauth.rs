@@ -19,6 +19,7 @@ use facet_common::jwt::{JwtGenerator, LocalJwtGenerator, TokenClaims};
 use facet_common::util::{Clock, default_clock};
 use reqwest::Client;
 use serde::Deserialize;
+use serde_json::{Map, Value};
 use std::sync::Arc;
 
 const DEFAULT_EXPIRATION_SECONDS: i64 = 300; // 5 minutes
@@ -48,23 +49,27 @@ impl TokenClient for OAuth2TokenClient {
         &self,
         participant_context: &ParticipantContext,
         endpoint_identifier: &str,
+        access_token: &str,
         refresh_token: &str,
         refresh_endpoint: &str,
     ) -> Result<TokenData, TokenError> {
         let now = self.clock.now().timestamp();
+        let mut custom_claims = Map::new();
+        custom_claims.insert("token".to_string(), Value::String(access_token.to_string()));
+
         let claims = TokenClaims::builder()
             .iss(&self.identifier)
             .sub(&self.identifier)
             .aud(endpoint_identifier)
             .exp(now + self.expiration_seconds)
+            .custom(custom_claims)
             .build();
         let jwt = self.jwt_generator.generate_token(participant_context, claims)?;
 
         let response = self
             .http_client
             .post(refresh_endpoint)
-            .query(&[("grant_type", "refresh_token"), ("refresh_token", refresh_token)])
-            .header("Content-Type", "application/x-www-form-urlencoded")
+            .form(&[("grant_type", "refresh_token"), ("refresh_token", refresh_token)])
             .header("Authorization", format!("Bearer {}", jwt))
             .send()
             .await
