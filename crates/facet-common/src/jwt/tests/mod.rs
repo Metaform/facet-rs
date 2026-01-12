@@ -107,7 +107,6 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience1")
-        .iat(now)
         .exp(now + 10000)
         .custom({
             let mut custom = serde_json::Map::new();
@@ -140,7 +139,6 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
 
     assert_eq!(verified_claims.sub, "user-id-123");
     assert_eq!(verified_claims.iss, "user-id-123");
-    assert_eq!(verified_claims.iat, now);
     assert_eq!(verified_claims.exp, now + 10000);
     assert_eq!(
         verified_claims.custom.get("access_token").unwrap(),
@@ -166,7 +164,6 @@ fn test_expired_token_validation_pem_eddsa() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now - 20000)
         .exp(now - 10000) // Expired 10,000 seconds ago
         .build();
 
@@ -208,7 +205,6 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
     let claims = TokenClaims::builder()
         .sub("user-id-789")
         .aud("audience1")
-        .iat(now - 100)
         .exp(now - 20) // Expired 20 seconds ago
         .build();
 
@@ -255,7 +251,6 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
         .sub("user-id-999")
         .iss("issuer-expired")
         .aud("audience-123")
-        .iat(now - 200)
         .exp(now - 100) // Expired 100 seconds ago
         .build();
 
@@ -301,7 +296,6 @@ fn test_invalid_signature_pem_eddsa() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .exp(now + 10000)
         .build();
 
@@ -388,7 +382,6 @@ fn test_mismatched_key_format_pem_eddsa() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .exp(now + 10000)
         .build();
 
@@ -427,7 +420,6 @@ fn test_rsa_token_generation_validation_pem() {
     let claims = TokenClaims::builder()
         .sub("user-id-456")
         .aud("audience1")
-        .iat(now)
         .exp(now + 10000)
         .custom({
             let mut custom = serde_json::Map::new();
@@ -457,7 +449,6 @@ fn test_rsa_token_generation_validation_pem() {
 
     assert_eq!(verified_claims.sub, "user-id-456");
     assert_eq!(verified_claims.iss, "issuer-rsa");
-    assert_eq!(verified_claims.iat, now);
     assert_eq!(verified_claims.exp, now + 10000);
     assert_eq!(
         verified_claims.custom.get("scope").unwrap(),
@@ -483,7 +474,6 @@ fn test_audience_mismatch_pem_eddsa() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .exp(now + 10000)
         .build();
 
@@ -534,7 +524,6 @@ fn test_algorithm_mismatch_pem() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .exp(now + 10000)
         .build();
 
@@ -578,7 +567,6 @@ fn test_not_before_validation_pem_eddsa() {
         .sub("user-id-123")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .nbf(now + 10000) // Not valid for another 10,000 seconds
         .exp(now + 20000)
         .build();
@@ -622,7 +610,6 @@ fn test_not_before_with_leeway_pem_eddsa() {
         .sub("user-id-456")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .nbf(now + 20) // Not valid for another 20 seconds
         .exp(now + 10000)
         .build();
@@ -670,7 +657,6 @@ fn test_not_before_beyond_leeway_pem_eddsa() {
         .sub("user-id-789")
         .iss("user-id-123")
         .aud("audience-123")
-        .iat(now)
         .nbf(now + 100) // Not valid for another 100 seconds
         .exp(now + 10000)
         .build();
@@ -696,4 +682,62 @@ fn test_not_before_beyond_leeway_pem_eddsa() {
 
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), JwtVerificationError::TokenNotYetValid));
+}
+
+#[test]
+fn test_generator_sets_iat_automatically_pem_eddsa() {
+    let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
+
+    let generator = create_test_generator(
+        keypair.private_key,
+        "user-id-123",
+        "did:web:example.com#key-1",
+        KeyFormat::PEM,
+        SigningAlgorithm::EdDSA,
+    );
+
+    let before_generation = Utc::now().timestamp();
+
+    // Set iat to a specific old value that should be ignored
+    let old_iat = 1609459200; // 2021-01-01 00:00:00 UTC
+    let now = Utc::now().timestamp();
+
+    let claims = TokenClaims::builder()
+        .sub("user-id-123")
+        .iss("user-id-123")
+        .aud("audience-123")
+        .iat(old_iat) // This should be ignored by the generator
+        .exp(now + 10000)
+        .build();
+
+    let pc = &ParticipantContext::builder()
+        .identifier("participant-1")
+        .audience("audience-123")
+        .build();
+
+    let token = generator
+        .generate_token(pc, claims)
+        .expect("Token generation should succeed");
+
+    let after_generation = Utc::now().timestamp();
+
+    let verifier = create_test_verifier(
+        keypair.public_key,
+        KeyFormat::PEM,
+        SigningAlgorithm::EdDSA,
+    );
+
+    let verified_claims = verifier
+        .verify_token(pc, token.as_str())
+        .expect("Token verification should succeed");
+
+    // Verify that the iat claim was set to current time, NOT the old value we passed in
+    assert_ne!(verified_claims.iat, old_iat, "Generator should ignore the iat value passed in TokenClaims");
+    assert!(
+        verified_claims.iat >= before_generation && verified_claims.iat <= after_generation,
+        "Generator should set iat to current timestamp. Expected between {} and {}, got {}",
+        before_generation,
+        after_generation,
+        verified_claims.iat
+    );
 }

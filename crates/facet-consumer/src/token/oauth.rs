@@ -56,7 +56,6 @@ impl TokenClient for OAuth2TokenClient {
             .iss(&self.identifier)
             .sub(&self.identifier)
             .aud(endpoint_identifier)
-            .iat(now)
             .exp(now + self.expiration_seconds)
             .build();
         let jwt = self.jwt_generator.generate_token(participant_context, claims)?;
