@@ -94,7 +94,7 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
     };
 
     let generator = create_test_generator(
-        keypair.private_key.clone(),
+        keypair.private_key,
         "user-id-123",
         "did:web:example.com#key-1",
         key_format.clone(),
@@ -129,7 +129,7 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(
-        keypair.public_key.clone(),
+        keypair.public_key,
         key_format,
         SigningAlgorithm::EdDSA,
     );
@@ -153,7 +153,7 @@ fn test_expired_token_validation_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
-        keypair.private_key.clone(),
+        keypair.private_key,
         "user-id-123",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -180,7 +180,7 @@ fn test_expired_token_validation_pem_eddsa() {
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(
-        keypair.public_key.clone(),
+        keypair.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::EdDSA,
     );
@@ -196,7 +196,7 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
-        keypair.private_key.clone(),
+        keypair.private_key,
         "issuer-leeway",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -223,7 +223,7 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
 
     // Verifier with 30-second leeway should accept token expired 20 seconds ago
     let verifier = create_test_verifier_with_leeway(
-        keypair.public_key.clone(),
+        keypair.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::EdDSA,
         30,
@@ -242,7 +242,7 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
-        keypair.private_key.clone(),
+        keypair.private_key,
         "user-id-123",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -270,7 +270,7 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
 
     // Verifier with 30-second leeway should reject token expired 100 seconds ago
     let verifier = create_test_verifier_with_leeway(
-        keypair.public_key.clone(),
+        keypair.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::EdDSA,
         30,
@@ -288,7 +288,7 @@ fn test_invalid_signature_pem_eddsa() {
     let keypair2 = generate_ed25519_keypair_pem().expect("Failed to generate keypair 2");
 
     let generator = create_test_generator(
-        keypair1.private_key.clone(),
+        keypair1.private_key,
         "user-id-123",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -316,7 +316,7 @@ fn test_invalid_signature_pem_eddsa() {
 
     // Try to verify with a different public key
     let verifier = create_test_verifier(
-        keypair2.public_key.clone(),
+        keypair2.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::EdDSA,
     );
@@ -332,7 +332,7 @@ fn test_malformed_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let verifier = create_test_verifier(
-        keypair.public_key.clone(),
+        keypair.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::EdDSA,
     );
@@ -376,7 +376,7 @@ fn test_mismatched_key_format_pem_eddsa() {
     let keypair_pem = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
-        keypair_pem.private_key.clone(),
+        keypair_pem.private_key,
         "user-id-123",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -399,7 +399,7 @@ fn test_mismatched_key_format_pem_eddsa() {
     let keypair_der = generate_ed25519_keypair_der().expect("Failed to generate DER keypair");
 
     let verifier = create_test_verifier(
-        keypair_der.public_key.clone(),
+        keypair_der.public_key,
         KeyFormat::DER,
         SigningAlgorithm::EdDSA,
     );
@@ -415,7 +415,7 @@ fn test_rsa_token_generation_validation_pem() {
     let keypair = generate_rsa_keypair_pem().expect("Failed to generate RSA PEM keypair");
 
     let generator = create_test_generator(
-        keypair.private_key.clone(),
+        keypair.private_key,
         "issuer-rsa",
         "did:web:example.com#key-1",
         KeyFormat::PEM,
@@ -446,7 +446,7 @@ fn test_rsa_token_generation_validation_pem() {
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(
-        keypair.public_key.clone(),
+        keypair.public_key,
         KeyFormat::PEM,
         SigningAlgorithm::RS256,
     );
