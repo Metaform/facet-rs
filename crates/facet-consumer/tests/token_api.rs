@@ -98,7 +98,7 @@ async fn test_api_end_to_end_with_refresh() {
         token: "old_token".to_string(),
         refresh_token: "old_refresh_token".to_string(),
         expires_at: Utc::now() - TimeDelta::hours(10),
-        refresh_endpoint: refresh_endpoint,
+        refresh_endpoint,
     };
     token_store.save_token(data).await.unwrap();
 
