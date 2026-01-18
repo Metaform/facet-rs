@@ -9,7 +9,7 @@ Facet-RS includes the following components:
 
 ### Distributed Locking
 
-Coordinate exclusive access to shared resources across multiple services or instances using a pluggable lock manager.
+Coordinates exclusive access to shared resources across multiple services or instances.
 Features include:
 
 - Reentrant locking
@@ -18,7 +18,7 @@ Features include:
 
 ### Token Management
 
-Manage OAuth/JWT token lifecycles with automatic refresh and concurrency control:
+Manages OAuth/JWT token lifecycles with automatic refresh and concurrency control:
 
 - Automatic refresh of expiring tokens
 - Distributed coordination to prevent concurrent refresh attempts
