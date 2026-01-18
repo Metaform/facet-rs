@@ -10,12 +10,8 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-pub mod context;
-pub mod util;
-pub mod jwt;
-pub mod proxy;
+pub mod s3;
 
 #[cfg(test)]
-pub mod test_fixtures {
-    pub use crate::jwt::jwtutils::*;
-}
+mod tests;
+

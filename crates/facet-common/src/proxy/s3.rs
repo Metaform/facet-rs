@@ -1,0 +1,438 @@
+//  Copyright (c) 2026 Metaform Systems, Inc
+//
+//  This program and the accompanying materials are made available under the
+//  terms of the Apache License, Version 2.0 which is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//       Metaform Systems, Inc. - initial API and implementation
+//
+
+//! S3 Proxy implementation based on Pingora
+//!
+//! This module implements a reverse proxy for S3-compatible storage services.
+//! It handles:
+//! - Request parsing (path-style and virtual-hosted-style addressing)
+//! - JWT token validation via `x-amz-security-token` header
+//! - AWS SigV4 request signing for upstream
+//! - Support for multiple upstream addressing styles
+//!
+//! # Architecture
+//!
+//! The proxy intercepts S3 requests, validates JWT tokens, and signs requests
+//! with AWS credentials before forwarding to the upstream S3 service.
+//!
+//! ## Request Flow
+//!
+//! 1. **Parse incoming request**: Extract bucket and key from either:
+//!    - Path-style: `/bucket/key` (e.g., `/my-bucket/path/to/file.txt`)
+//!    - Virtual-hosted-style: `bucket.proxy.com/key`
+//!
+//! 2. **Validate JWT token**: Check `x-amz-security-token` header
+//!
+//! 3. **Sign request**: Generate AWS SigV4 signature using resolved credentials
+//!
+//! 4. **Forward to upstream**: Transform request for upstream S3 service based on:
+//!    - `UpstreamStyle::PathStyle`: Send as `/bucket/key` to fixed endpoint
+//!    - `UpstreamStyle::VirtualHosted`: Send as `/key` to `bucket.endpoint`
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use facet_common::proxy::s3::{S3Proxy, UpstreamStyle};
+//!
+//! let proxy = S3Proxy::builder()
+//!     .use_tls(true)
+//!     .upstream_endpoint("s3.amazonaws.com".to_string())
+//!     .upstream_style(UpstreamStyle::VirtualHosted)
+//!     .proxy_domain(Some("proxy.example.com".to_string()))
+//!     .credential_resolver(Arc::new(my_credential_resolver))
+//!     .participant_context_resolver(Arc::new(my_context_resolver))
+//!     .build();
+//! ```
+
+use crate::context::ParticipantContext;
+use crate::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
+use async_trait::async_trait;
+use aws_credential_types::Credentials;
+use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
+use aws_sigv4::sign::v4;
+use aws_smithy_runtime_api::client::identity::Identity;
+use bon::Builder;
+use pingora_core::upstreams::peer::HttpPeer;
+use pingora_core::Result;
+use pingora_proxy::{ProxyHttp, Session};
+use std::sync::Arc;
+use std::time::SystemTime;
+
+const SECURITY_TOKEN_HEADER: &str = "x-amz-security-token";
+const HOST: &str = "host";
+
+/// S3 addressing style for upstream requests
+#[derive(Clone, Debug, PartialEq)]
+pub enum UpstreamStyle {
+    /// Path-style: http://endpoint/bucket/key
+    PathStyle,
+    /// Virtual-hosted-style: http://bucket.endpoint/key
+    VirtualHosted,
+}
+
+/// Parsed S3 request with bucket and key extracted
+#[derive(Clone, Debug)]
+pub(crate) struct ParsedS3Request {
+    pub(crate) bucket: String,
+    pub(crate) key: String, // Can be empty for bucket-level operations
+}
+
+/// Resolves credentials for a given participant context.
+pub trait S3CredentialResolver: Sync + Send {
+    fn resolve_credentials(&self, context: &ParticipantContext) -> Result<S3Credentials>;
+}
+
+/// Resolves the participant context for a given request URL.
+pub trait ParticipantContextResolver: Sync + Send {
+    fn resolve(&self, url: &str) -> Result<ParticipantContext>;
+}
+
+#[derive(Clone)]
+pub struct S3Credentials {
+    pub access_key_id: String,
+    pub secret_key: String,
+    pub region: String,
+}
+
+#[derive(Builder)]
+pub struct S3Proxy {
+    use_tls: bool,
+    #[builder(default = (if use_tls { 443u16 } else { 80u16 }))]
+    default_port: u16,
+    participant_context_resolver: Arc<dyn ParticipantContextResolver>,
+    credential_resolver: Arc<dyn S3CredentialResolver>,
+    #[builder(default =  Arc::new(NoOpJwtVerifier))]
+    token_verifier: Arc<dyn JwtVerifier>,
+    upstream_endpoint: String, // S3 service endpoint
+    /// How to format requests to the upstream S3 service
+    #[builder(default = UpstreamStyle::PathStyle)]
+    upstream_style: UpstreamStyle,
+    /// Optional proxy domain for extracting bucket from virtual-hosted requests
+    /// Example: "proxy.example.com" - strips this from "bucket.proxy.example.com"
+    /// If None, assumes incoming path-style requests
+    proxy_domain: Option<String>,
+}
+
+impl S3Proxy {
+    /// Parse incoming request to extract bucket and key
+    pub(crate) fn parse_incoming_request(&self, host: &str, path: &str) -> Result<ParsedS3Request> {
+        // Try virtual-hosted-style first if proxy_domain is set
+        if let Some(ref proxy_domain) = self.proxy_domain
+            && let Some(bucket) = Self::extract_bucket_from_host(host, proxy_domain)
+        {
+            return Ok(ParsedS3Request {
+                bucket,
+                key: path.trim_start_matches('/').to_string(),
+            });
+        }
+
+        // Try path-style: /bucket/key or /bucket
+        if let Some(parsed) = Self::try_parse_path_style(path) {
+            return Ok(parsed);
+        }
+
+        // Fallback error
+        Err(internal_error(format!("Cannot parse S3 request from path: {}", path)))
+    }
+
+    pub(crate) fn try_parse_path_style(path: &str) -> Option<ParsedS3Request> {
+        let path = path.trim_start_matches('/');
+        if path.is_empty() {
+            return None;
+        }
+
+        let mut parts = path.splitn(2, '/');
+        let bucket = parts.next()?.to_string();
+        let key = parts.next().unwrap_or("").to_string();
+
+        Some(ParsedS3Request { bucket, key })
+    }
+
+    pub(crate) fn extract_bucket_from_host(host: &str, proxy_domain: &str) -> Option<String> {
+        // Remove port if present
+        let host_without_port = host.split(':').next()?;
+
+        // Check if host ends with .proxy_domain
+        if let Some(bucket) = host_without_port.strip_suffix(&format!(".{}", proxy_domain))
+            && !bucket.is_empty()
+        {
+            return Some(bucket.to_string());
+        }
+
+        // Check if host exactly matches proxy_domain (no bucket, root operations)
+        if host_without_port == proxy_domain {
+            return None; // No bucket in host
+        }
+
+        None
+    }
+
+    pub(crate) fn parse_endpoint(&self, endpoint: &str) -> Result<(String, u16)> {
+        match endpoint.rsplit_once(':') {
+            Some((hostname, port_str)) => {
+                let port = port_str
+                    .parse::<u16>()
+                    .map_err(|e| internal_error(format!("Invalid port '{}': {}", port_str, e)))?;
+                Ok((hostname.to_string(), port))
+            }
+            None => Ok((endpoint.to_string(), self.default_port)),
+        }
+    }
+
+    /// Extract host and path from request header
+    pub(crate) fn extract_request_components<'a>(
+        &self,
+        req_header: &'a pingora_http::RequestHeader,
+    ) -> Result<(&'a str, &'a str)> {
+        let path = req_header.uri.path();
+        let host = req_header
+            .headers
+            .get(HOST)
+            .and_then(|h| h.to_str().ok())
+            .ok_or_else(|| internal_error("Missing Host header"))?;
+        Ok((host, path))
+    }
+
+    /// Build upstream host and port based on addressing style
+    pub(crate) fn build_upstream_host(&self, parsed: &ParsedS3Request) -> Result<(String, u16)> {
+        match &self.upstream_style {
+            UpstreamStyle::PathStyle => {
+                // Path-style: just use upstream_endpoint as-is
+                self.parse_endpoint(&self.upstream_endpoint)
+            }
+            UpstreamStyle::VirtualHosted => {
+                // Virtual-hosted-style: prepend bucket to upstream_endpoint
+                let virtual_host = format!("{}.{}", parsed.bucket, self.upstream_endpoint);
+                self.parse_endpoint(&virtual_host)
+            }
+        }
+    }
+
+    /// Build upstream URI and Host header based on addressing style
+    pub(crate) fn build_upstream_uri_and_host(&self, parsed: &ParsedS3Request) -> (String, String) {
+        match &self.upstream_style {
+            UpstreamStyle::PathStyle => {
+                // Path-style: /bucket/key
+                let uri = if parsed.key.is_empty() {
+                    format!("/{}", parsed.bucket)
+                } else {
+                    format!("/{}/{}", parsed.bucket, parsed.key)
+                };
+                (uri, self.upstream_endpoint.to_string())
+            }
+            UpstreamStyle::VirtualHosted => {
+                // Virtual-hosted-style: /key with bucket.endpoint as Host
+                let uri = format!("/{}", parsed.key);
+                let host = format!("{}.{}", parsed.bucket, self.upstream_endpoint);
+                (uri, host)
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ProxyHttp for S3Proxy {
+    type CTX = ParticipantContext;
+
+    fn new_ctx(&self) -> Self::CTX {
+        ParticipantContext {
+            identifier: "anonymous".to_string(),
+            audience: "anonymous".to_string(),
+        }
+    }
+
+    async fn upstream_peer(&self, session: &mut Session, participant_context: &mut Self::CTX) -> Result<Box<HttpPeer>> {
+        let req_header = session.req_header();
+        let (host, path) = self.extract_request_components(req_header)?;
+        *participant_context = self.participant_context_resolver.resolve(path)?;
+
+        // Parse incoming request to extract bucket and key
+        let parsed = self.parse_incoming_request(host, path)?;
+
+        // Construct upstream peer based on style
+        let (upstream_host, port) = self.build_upstream_host(&parsed)?;
+
+        let addr = format!("{}:{}", upstream_host, port);
+        let peer = Box::new(HttpPeer::new(
+            addr.as_str(),
+            self.use_tls,
+            upstream_host.clone(),
+        ));
+
+        Ok(peer)
+    }
+
+    async fn upstream_request_filter(
+        &self,
+        session: &mut Session,
+        upstream_request: &mut pingora_http::RequestHeader,
+        participant_context: &mut Self::CTX,
+    ) -> Result<()> {
+        // Parse incoming request to extract bucket and key
+        let req_header = session.req_header();
+        let (host, path) = self.extract_request_components(req_header)?;
+
+        let parsed = self.parse_incoming_request(host, path)?;
+
+        // Reconstruct URI and Host based on upstream_style
+        let (new_uri, new_host) = self.build_upstream_uri_and_host(&parsed);
+
+        // Update the request URI
+        let uri: http::Uri = new_uri.parse().map_err(|e| internal_error(format!("Failed to parse URI: {}", e)))?;
+        upstream_request.set_uri(uri);
+
+        // Update Host header
+        upstream_request.remove_header(HOST);
+        upstream_request
+            .insert_header(HOST, new_host.as_str())
+            .map_err(|e| internal_error(format!("Failed to insert host header: {}", e)))?;
+
+        // Extract x-amz-security-token header and validate the token
+        let token = session
+            .req_header()
+            .headers
+            .get(SECURITY_TOKEN_HEADER)
+            .and_then(|h| h.to_str().ok())
+            .ok_or_else(|| http_status_error(403, "Missing x-amz-security-token header"))?;
+
+        // Verify token (remove from request if valid)
+        self.token_verifier
+            .verify_token(participant_context, token)
+            .map_err(|e| http_status_error(403, format!("Token validation failed: {}", e)))?;
+
+        upstream_request.remove_header(SECURITY_TOKEN_HEADER);
+
+        // Extract request components for signing (use new URI and Host)
+        let method = upstream_request.method.as_str();
+        let uri = upstream_request.uri.to_string();
+
+        // Build signing params
+        let creds = self.credential_resolver.resolve_credentials(participant_context)?;
+
+        let aws_creds = Credentials::new(&creds.access_key_id, &creds.secret_key, None, None, "facet-proxy");
+
+        let identity: Identity = aws_creds.into();
+
+        // Create signing settings
+        let mut settings = SigningSettings::default();
+        settings.payload_checksum_kind = aws_sigv4::http_request::PayloadChecksumKind::XAmzSha256;
+
+        let signing_params = v4::SigningParams::builder()
+            .identity(&identity)
+            .region(&creds.region)
+            .name("s3")
+            .time(SystemTime::now())
+            .settings(settings)
+            .build()
+            .map_err(|e| internal_error(format!("Failed to build signing params: {}", e)))?
+            .into();
+
+        // Convert Pingora RequestHeader to http::Request for signing
+        let mut http_request = http::Request::builder().method(method).uri(&uri);
+
+        // Copy headers (including the host header we set earlier)
+        for (name, value) in &upstream_request.headers {
+            http_request = http_request.header(name, value);
+        }
+
+        let http_request = http_request.body("").map_err(|e| internal_error(format!("Failed to build HTTP request: {}", e)))?;
+
+        // Sign the request
+        let headers_vec: Vec<(String, String)> = http_request
+            .headers()
+            .iter()
+            .filter_map(|(k, v)| v.to_str().ok().map(|v_str| (k.as_str().to_string(), v_str.to_string())))
+            .collect();
+
+        let signable_request = SignableRequest::new(
+            http_request.method().as_str(),
+            http_request.uri().to_string(),
+            headers_vec.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            SignableBody::UnsignedPayload,
+        )
+        .map_err(|e| internal_error(format!("Failed to create signable request: {}", e)))?;
+
+        let (signing_instructions, _) = sign(signable_request, &signing_params)
+            .map_err(|e| internal_error(format!("Failed to sign request: {}", e)))?
+            .into_parts();
+
+        // Apply signing headers to upstream request
+        let headers_to_add: Vec<(String, String)> = signing_instructions
+            .headers()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        for (name, value) in headers_to_add {
+            upstream_request.insert_header(name, value.as_bytes()).map_err(|e| internal_error(format!("Failed to insert signing header: {}", e)))?;
+        }
+        Ok(())
+    }
+}
+
+/// Helper to create internal errors with explanation
+#[inline]
+fn internal_error(msg: impl Into<String>) -> Box<pingora_core::Error> {
+    pingora_core::Error::explain(
+        pingora_core::ErrorType::InternalError,
+        msg.into(),
+    )
+}
+
+/// Helper to create HTTP status errors with explanation
+#[inline]
+fn http_status_error(status: u16, msg: impl Into<String>) -> Box<pingora_core::Error> {
+    pingora_core::Error::explain(
+        pingora_core::ErrorType::HTTPStatus(status),
+        msg.into(),
+    )
+}
+
+/// Default no-op JWT verifier that accepts all tokens (for testing and pass-through mode)
+struct NoOpJwtVerifier;
+
+impl JwtVerifier for NoOpJwtVerifier {
+    fn verify_token(
+        &self,
+        _participant_context: &ParticipantContext,
+        _token: &str,
+    ) -> Result<TokenClaims, JwtVerificationError> {
+        Ok(TokenClaims {
+            sub: "noop".to_string(),
+            iss: "noop".to_string(),
+            aud: "noop".to_string(),
+            iat: 0,
+            exp: 9999999999,
+            nbf: None,
+            custom: Default::default(),
+        })
+    }
+}
+
+pub struct StaticCredentialsResolver {
+    pub credentials: S3Credentials,
+}
+
+impl S3CredentialResolver for StaticCredentialsResolver {
+    fn resolve_credentials(&self, _context: &ParticipantContext) -> Result<S3Credentials> {
+        Ok(self.credentials.clone())
+    }
+}
+
+pub struct StaticParticipantContextResolver {
+    pub participant_context: ParticipantContext,
+}
+
+impl ParticipantContextResolver for StaticParticipantContextResolver {
+    fn resolve(&self, _url: &str) -> Result<ParticipantContext> {
+        Ok(self.participant_context.clone())
+    }
+}
