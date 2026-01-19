@@ -10,4 +10,5 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-pub mod s3;
+mod opparser;
+mod s3;

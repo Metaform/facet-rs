@@ -11,21 +11,23 @@
 //
 
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::Client;
+use facet_common::auth::{MemoryAuthorizationEvaluator, Rule};
 use facet_common::context::ParticipantContext;
 use facet_common::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
 use facet_common::proxy::s3::{
     S3Credentials, S3Proxy, StaticCredentialsResolver, StaticParticipantContextResolver, UpstreamStyle,
 };
-use pingora::server::Server;
 use pingora::server::configuration::Opt;
+use pingora::server::Server;
 use pingora_proxy::http_proxy_service;
+use serde_json::Value;
 use std::net::TcpListener;
 use std::sync::Arc;
 use testcontainers::core::WaitFor;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt, core::ContainerPort, runners::AsyncRunner};
+use testcontainers::{core::ContainerPort, runners::AsyncRunner, ContainerAsync, GenericImage, ImageExt};
 
 const MINIO_ACCESS_KEY: &str = "minioadmin";
 const MINIO_SECRET_KEY: &str = "minioadmin";
@@ -183,6 +185,18 @@ fn launch_s3proxy(port: u16, upstream_endpoint: String, upstream_style: Upstream
             },
         });
 
+        // Set up MemoryAuthorizationEvaluator with rules
+        let auth_evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
+
+        // Add rule: Allow participant "proxy" to perform s3:GetObject on any resource with scope "test-scope"
+        let rule = Rule::new(
+            "test-scope".to_string(),
+            vec!["s3:GetObject".to_string()],
+            ".*".to_string(), // Match any resource
+        ).expect("Failed to create authorization rule");
+
+        auth_evaluator.add_rule("proxy".to_string(), rule);
+
         let proxy = S3Proxy::builder()
             .use_tls(false)
             .credential_resolver(credentials_resolver)
@@ -191,6 +205,7 @@ fn launch_s3proxy(port: u16, upstream_endpoint: String, upstream_style: Upstream
             .upstream_endpoint(upstream_endpoint)
             .upstream_style(upstream_style)
             .maybe_proxy_domain(proxy_domain)
+            .auth_evaluator(auth_evaluator)
             .build();
 
         let mut server = Server::new(Some(Opt {
@@ -245,6 +260,9 @@ impl JwtVerifier for TokenMatchingJwtVerifier {
         _participant_context: &ParticipantContext,
         token: &str,
     ) -> Result<TokenClaims, JwtVerificationError> {
+        let mut custom = serde_json::Map::new();
+        custom.insert("scope".to_string(), Value::String("test-scope".to_string()));
+
         if token == self.valid_token {
             Ok(TokenClaims {
                 sub: "test-user".to_string(),
@@ -253,7 +271,7 @@ impl JwtVerifier for TokenMatchingJwtVerifier {
                 iat: 0,
                 exp: 9999999999,
                 nbf: None,
-                custom: Default::default(),
+                custom,
             })
         } else {
             Err(JwtVerificationError::InvalidSignature)

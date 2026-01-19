@@ -53,19 +53,29 @@
 //!     .build();
 //! ```
 
+pub mod opparser;
+
+#[cfg(test)]
+mod tests;
+
+use crate::auth::{AuthorizationEvaluator, Operation};
 use crate::context::ParticipantContext;
 use crate::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
 use async_trait::async_trait;
 use aws_credential_types::Credentials;
-use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
+use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use bon::Builder;
-use pingora_core::upstreams::peer::HttpPeer;
 use pingora_core::Result;
+use pingora_core::upstreams::peer::HttpPeer;
+use pingora_http::RequestHeader;
 use pingora_proxy::{ProxyHttp, Session};
+use serde_json::{Map, Value};
 use std::sync::Arc;
 use std::time::SystemTime;
+
+pub use opparser::DefaultS3OperationParser;
 
 const SECURITY_TOKEN_HEADER: &str = "x-amz-security-token";
 const HOST: &str = "host";
@@ -96,6 +106,10 @@ pub trait ParticipantContextResolver: Sync + Send {
     fn resolve(&self, url: &str) -> Result<ParticipantContext>;
 }
 
+pub trait S3OperationParser: Sync + Send {
+    fn parse_operation(&self, scope: &str, request: &RequestHeader) -> Result<Operation>;
+}
+
 #[derive(Clone)]
 pub struct S3Credentials {
     pub access_key_id: String,
@@ -112,6 +126,9 @@ pub struct S3Proxy {
     credential_resolver: Arc<dyn S3CredentialResolver>,
     #[builder(default =  Arc::new(NoOpJwtVerifier))]
     token_verifier: Arc<dyn JwtVerifier>,
+    auth_evaluator: Arc<dyn AuthorizationEvaluator>,
+    #[builder(default = Arc::new(DefaultS3OperationParser::new()))]
+    operation_parser: Arc<dyn S3OperationParser>,
     upstream_endpoint: String, // S3 service endpoint
     /// How to format requests to the upstream S3 service
     #[builder(default = UpstreamStyle::PathStyle)]
@@ -188,7 +205,7 @@ impl S3Proxy {
         }
     }
 
-    /// Extract host and path from request header
+    /// Extract host and path from the request header
     pub(crate) fn extract_request_components<'a>(
         &self,
         req_header: &'a pingora_http::RequestHeader,
@@ -262,11 +279,7 @@ impl ProxyHttp for S3Proxy {
         let (upstream_host, port) = self.build_upstream_host(&parsed)?;
 
         let addr = format!("{}:{}", upstream_host, port);
-        let peer = Box::new(HttpPeer::new(
-            addr.as_str(),
-            self.use_tls,
-            upstream_host.clone(),
-        ));
+        let peer = Box::new(HttpPeer::new(addr.as_str(), self.use_tls, upstream_host.clone()));
 
         Ok(peer)
     }
@@ -287,7 +300,9 @@ impl ProxyHttp for S3Proxy {
         let (new_uri, new_host) = self.build_upstream_uri_and_host(&parsed);
 
         // Update the request URI
-        let uri: http::Uri = new_uri.parse().map_err(|e| internal_error(format!("Failed to parse URI: {}", e)))?;
+        let uri: http::Uri = new_uri
+            .parse()
+            .map_err(|e| internal_error(format!("Failed to parse URI: {}", e)))?;
         upstream_request.set_uri(uri);
 
         // Update Host header
@@ -305,9 +320,31 @@ impl ProxyHttp for S3Proxy {
             .ok_or_else(|| http_status_error(403, "Missing x-amz-security-token header"))?;
 
         // Verify token (remove from request if valid)
-        self.token_verifier
+        let claims = self
+            .token_verifier
             .verify_token(participant_context, token)
-            .map_err(|e| http_status_error(403, format!("Token validation failed: {}", e)))?;
+            .map_err(|e| http_status_error(403, format!("Invalid token: {}", e)))?;
+
+        let scope = claims
+            .custom
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| http_status_error(403, "Missing scope in token claims"))?
+            .to_string();
+
+        // Parse operation from request
+        let operation = self
+            .operation_parser
+            .parse_operation(&scope, req_header)?;
+
+        let is_authorized = self
+            .auth_evaluator
+            .evaluate(participant_context, operation)
+            .map_err(|e| http_status_error(403, format!("Authorization error: {}", e)))?;
+
+        if !is_authorized {
+            return Err(http_status_error(403, "Unauthorized operation"));
+        }
 
         upstream_request.remove_header(SECURITY_TOKEN_HEADER);
 
@@ -344,7 +381,9 @@ impl ProxyHttp for S3Proxy {
             http_request = http_request.header(name, value);
         }
 
-        let http_request = http_request.body("").map_err(|e| internal_error(format!("Failed to build HTTP request: {}", e)))?;
+        let http_request = http_request
+            .body("")
+            .map_err(|e| internal_error(format!("Failed to build HTTP request: {}", e)))?;
 
         // Sign the request
         let headers_vec: Vec<(String, String)> = http_request
@@ -372,7 +411,9 @@ impl ProxyHttp for S3Proxy {
             .collect();
 
         for (name, value) in headers_to_add {
-            upstream_request.insert_header(name, value.as_bytes()).map_err(|e| internal_error(format!("Failed to insert signing header: {}", e)))?;
+            upstream_request
+                .insert_header(name, value.as_bytes())
+                .map_err(|e| internal_error(format!("Failed to insert signing header: {}", e)))?;
         }
         Ok(())
     }
@@ -380,20 +421,14 @@ impl ProxyHttp for S3Proxy {
 
 /// Helper to create internal errors with explanation
 #[inline]
-fn internal_error(msg: impl Into<String>) -> Box<pingora_core::Error> {
-    pingora_core::Error::explain(
-        pingora_core::ErrorType::InternalError,
-        msg.into(),
-    )
+pub(crate) fn internal_error(msg: impl Into<String>) -> Box<pingora_core::Error> {
+    pingora_core::Error::explain(pingora_core::ErrorType::InternalError, msg.into())
 }
 
 /// Helper to create HTTP status errors with explanation
 #[inline]
 fn http_status_error(status: u16, msg: impl Into<String>) -> Box<pingora_core::Error> {
-    pingora_core::Error::explain(
-        pingora_core::ErrorType::HTTPStatus(status),
-        msg.into(),
-    )
+    pingora_core::Error::explain(pingora_core::ErrorType::HTTPStatus(status), msg.into())
 }
 
 /// Default no-op JWT verifier that accepts all tokens (for testing and pass-through mode)
@@ -405,6 +440,8 @@ impl JwtVerifier for NoOpJwtVerifier {
         _participant_context: &ParticipantContext,
         _token: &str,
     ) -> Result<TokenClaims, JwtVerificationError> {
+        let mut custom = Map::new();
+        custom.insert("scope".to_string(), Value::String("test-scope".to_string()));
         Ok(TokenClaims {
             sub: "noop".to_string(),
             iss: "noop".to_string(),
@@ -412,7 +449,7 @@ impl JwtVerifier for NoOpJwtVerifier {
             iat: 0,
             exp: 9999999999,
             nbf: None,
-            custom: Default::default(),
+            custom,
         })
     }
 }
@@ -436,3 +473,4 @@ impl ParticipantContextResolver for StaticParticipantContextResolver {
         Ok(self.participant_context.clone())
     }
 }
+

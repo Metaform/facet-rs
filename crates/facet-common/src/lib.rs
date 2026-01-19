@@ -14,6 +14,7 @@ pub mod context;
 pub mod util;
 pub mod jwt;
 pub mod proxy;
+pub mod auth;
 
 #[cfg(test)]
 pub mod test_fixtures {

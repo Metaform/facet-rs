@@ -10,9 +10,10 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use super::super::s3::*;
+use super::super::*;
 use crate::context::ParticipantContext;
 use std::sync::Arc;
+use crate::auth::TrueAuthorizationEvaluator;
 
 #[test]
 fn test_try_parse_path_style_with_key() {
@@ -193,6 +194,7 @@ fn test_parse_endpoint_with_tls() {
                 audience: "test".to_string(),
             },
         }))
+        .auth_evaluator(Arc::new(TrueAuthorizationEvaluator::new()))
         .build();
 
     let (host, port) = proxy.parse_endpoint("example.com").unwrap();
@@ -326,6 +328,7 @@ fn create_test_proxy(upstream_style: UpstreamStyle, proxy_domain: Option<String>
                 audience: "test".to_string(),
             },
         }))
+        .auth_evaluator(Arc::new(TrueAuthorizationEvaluator::new()))
         .build()
 }
 

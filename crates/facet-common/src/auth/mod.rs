@@ -1,0 +1,104 @@
+//  Copyright (c) 2026 Metaform Systems, Inc
+//
+//  This program and the accompanying materials are made available under the
+//  terms of the Apache License, Version 2.0 which is available at
+//  https://www.apache.org/licenses/LICENSE-2.0
+//
+//  SPDX-License-Identifier: Apache-2.0
+//
+//  Contributors:
+//       Metaform Systems, Inc. - initial API and implementation
+//
+
+#[cfg(test)]
+mod tests;
+
+mod mem;
+
+use crate::context::ParticipantContext;
+use regex::Regex;
+use thiserror::Error;
+
+pub use mem::MemoryAuthorizationEvaluator;
+
+/// Represents an operation with specific attributes that describe its scope, action, and resource.
+///
+/// # Fields
+///
+/// * `scope` - The scope or domain of the operation, for example, a contract agreement.
+/// * `action` - The specific action to be performed, such as "protocol::read", "write", or "protocol::delete".
+/// * `resource` - The resource on which the action will be performed.
+#[derive(Debug, Clone)]
+pub struct Operation {
+    pub scope: String,
+    pub action: String,
+    pub resource: String,
+}
+
+/// Represents a rule that defines access or operational constraints on a resource.
+///
+/// # Fields
+///
+/// * `scope` - The scope or domain of the operation, for example, a contract agreement.
+/// * `action` - The specific action to be performed, such as "protocol::read", "write", or "protocol::delete".
+/// * `resource` - The resource on which the action will be performed.
+#[derive(Debug, Clone)]
+pub struct Rule {
+    pub scope: String,
+    pub actions: Vec<String>,
+    pub resource: String,
+    pub compiled_regex: Option<Regex>,
+}
+
+impl Rule {
+    pub fn new(scope: String, actions: Vec<String>, resource: String) -> Result<Self, AuthorizationError> {
+        let compiled_regex = Regex::new(&resource)
+            .map(Some)
+            .map_err(|e| AuthorizationError::InvalidRegex(format!("Failed to compile regex '{}': {}", resource, e)))?;
+
+        Ok(Self {
+            scope,
+            actions,
+            resource,
+            compiled_regex,
+        })
+    }
+
+    pub fn matches_resource(&self, resource: &str) -> bool {
+        match &self.compiled_regex {
+            Some(regex) => regex.is_match(resource),
+            None => resource == self.resource,
+        }
+    }
+}
+
+/// Evaluates whether an operation is authorized for a participant based on the configured rules.
+pub trait AuthorizationEvaluator: Sync + Send {
+    fn evaluate(
+        &self,
+        participant_context: &ParticipantContext,
+        operation: Operation,
+    ) -> Result<bool, AuthorizationError>;
+}
+
+pub struct TrueAuthorizationEvaluator {}
+
+impl TrueAuthorizationEvaluator {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl AuthorizationEvaluator for TrueAuthorizationEvaluator {
+    fn evaluate(&self, _: &ParticipantContext, _: Operation) -> Result<bool, AuthorizationError> {
+        Ok(true)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum AuthorizationError {
+    #[error("Internal error: {0}")]
+    InternalError(String),
+    #[error("Invalid regex pattern: {0}")]
+    InvalidRegex(String),
+}
