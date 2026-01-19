@@ -10,5 +10,6 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+mod auth;
 mod opparser;
 mod s3;

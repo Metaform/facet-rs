@@ -10,27 +10,17 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+mod common;
+
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::config::{Credentials, Region};
-use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
-use facet_common::auth::{MemoryAuthorizationEvaluator, Rule};
-use facet_common::context::ParticipantContext;
-use facet_common::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
-use facet_common::proxy::s3::{
-    S3Credentials, S3Proxy, StaticCredentialsResolver, StaticParticipantContextResolver, UpstreamStyle,
+use facet_common::proxy::s3::UpstreamStyle;
+use crate::common::{
+    get_available_port, launch_minio, launch_s3proxy_with_token_validation,
+    setup_test_bucket_with_file, MINIO_ACCESS_KEY, MINIO_SECRET_KEY,
 };
-use pingora::server::configuration::Opt;
-use pingora::server::Server;
-use pingora_proxy::http_proxy_service;
-use serde_json::Value;
-use std::net::TcpListener;
-use std::sync::Arc;
-use testcontainers::core::WaitFor;
-use testcontainers::{core::ContainerPort, runners::AsyncRunner, ContainerAsync, GenericImage, ImageExt};
 
-const MINIO_ACCESS_KEY: &str = "minioadmin";
-const MINIO_SECRET_KEY: &str = "minioadmin";
 const TEST_BUCKET: &str = "test-bucket";
 const TEST_KEY: &str = "test-file.txt";
 const TEST_CONTENT: &str = "Hello from Pingora proxy test!";
@@ -47,9 +37,16 @@ async fn test_s3_proxy_with_token_validation() {
 
     // Get an available port for the proxy
     let proxy_port = get_available_port();
-    launch_s3proxy(proxy_port, minio_host.clone(), UpstreamStyle::PathStyle, None);
+    launch_s3proxy_with_token_validation(
+        proxy_port,
+        minio_host.clone(),
+        UpstreamStyle::PathStyle,
+        None,
+        VALID_SESSION_TOKEN.to_string(),
+        "test-scope".to_string(),
+    );
 
-    setup_test_file(&minio_endpoint).await;
+    setup_test_bucket_with_file(&minio_endpoint, TEST_BUCKET, TEST_KEY, TEST_CONTENT.as_bytes()).await;
 
     // Configure SDK to use the proxy as a reverse proxy endpoint
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -132,149 +129,4 @@ async fn test_s3_proxy_with_token_validation() {
         .await;
 
     assert!(result.is_err(), "Request without token should fail");
-}
-
-/// Setup: Create the test bucket and upload the test file to MinIO
-async fn setup_test_file(minio_endpoint: &String) {
-    let config = aws_config::defaults(BehaviorVersion::latest())
-        .credentials_provider(Credentials::new(MINIO_ACCESS_KEY, MINIO_SECRET_KEY, None, None, "test"))
-        .region(Region::new("us-east-1"))
-        .endpoint_url(minio_endpoint)
-        .load()
-        .await;
-
-    let client = Client::new(&config);
-
-    client
-        .create_bucket()
-        .bucket(TEST_BUCKET)
-        .send()
-        .await
-        .expect("Failed to create bucket");
-
-    client
-        .put_object()
-        .bucket(TEST_BUCKET)
-        .key(TEST_KEY)
-        .body(ByteStream::from_static(TEST_CONTENT.as_bytes()))
-        .send()
-        .await
-        .expect("Failed to upload file");
-}
-
-/// Launches an S3 Proxy on a separate thread that validates requests against a static token.
-fn launch_s3proxy(port: u16, upstream_endpoint: String, upstream_style: UpstreamStyle, proxy_domain: Option<String>) {
-    std::thread::spawn(move || {
-        // Create proxy with credentials for signing AND token validation
-        let verifier: Arc<dyn JwtVerifier> = Arc::new(TokenMatchingJwtVerifier {
-            valid_token: VALID_SESSION_TOKEN.to_string(),
-        });
-
-        let credentials_resolver = Arc::new(StaticCredentialsResolver {
-            credentials: S3Credentials {
-                access_key_id: MINIO_ACCESS_KEY.to_string(),
-                secret_key: MINIO_SECRET_KEY.to_string(),
-                region: "us-east-1".to_string(),
-            },
-        });
-
-        let participant_context_resolver = Arc::new(StaticParticipantContextResolver {
-            participant_context: ParticipantContext {
-                identifier: "proxy".to_string(),
-                audience: "s3-proxy".to_string(),
-            },
-        });
-
-        // Set up MemoryAuthorizationEvaluator with rules
-        let auth_evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-
-        // Add rule: Allow participant "proxy" to perform s3:GetObject on any resource with scope "test-scope"
-        let rule = Rule::new(
-            "test-scope".to_string(),
-            vec!["s3:GetObject".to_string()],
-            ".*".to_string(), // Match any resource
-        ).expect("Failed to create authorization rule");
-
-        auth_evaluator.add_rule("proxy".to_string(), rule);
-
-        let proxy = S3Proxy::builder()
-            .use_tls(false)
-            .credential_resolver(credentials_resolver)
-            .participant_context_resolver(participant_context_resolver)
-            .token_verifier(verifier)
-            .upstream_endpoint(upstream_endpoint)
-            .upstream_style(upstream_style)
-            .maybe_proxy_domain(proxy_domain)
-            .auth_evaluator(auth_evaluator)
-            .build();
-
-        let mut server = Server::new(Some(Opt {
-            upgrade: false,
-            daemon: false,
-            nocapture: false,
-            test: false,
-            conf: None,
-        }))
-        .unwrap();
-
-        server.bootstrap();
-
-        let mut proxy_service = http_proxy_service(&server.configuration, proxy);
-
-        proxy_service.add_tcp(&format!("0.0.0.0:{}", port));
-
-        server.add_service(proxy_service);
-        server.run_forever();
-    });
-}
-
-async fn launch_minio() -> ContainerAsync<GenericImage> {
-    let minio_container = GenericImage::new("minio/minio", "latest")
-        .with_wait_for(WaitFor::message_on_stderr("API:"))
-        .with_exposed_port(ContainerPort::Tcp(9000))
-        .with_env_var("MINIO_ROOT_USER", MINIO_ACCESS_KEY)
-        .with_env_var("MINIO_ROOT_PASSWORD", MINIO_SECRET_KEY)
-        .with_cmd(vec!["server", "/data"])
-        .start()
-        .await
-        .unwrap();
-    minio_container
-}
-
-/// Gets an available port by binding to port 0 and retrieving the assigned port.
-fn get_available_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to port 0");
-    let port = listener.local_addr().expect("Failed to get local address").port();
-    drop(listener);
-    port
-}
-
-/// Mock JWT verifier that validates against a specific token
-struct TokenMatchingJwtVerifier {
-    valid_token: String,
-}
-
-impl JwtVerifier for TokenMatchingJwtVerifier {
-    fn verify_token(
-        &self,
-        _participant_context: &ParticipantContext,
-        token: &str,
-    ) -> Result<TokenClaims, JwtVerificationError> {
-        let mut custom = serde_json::Map::new();
-        custom.insert("scope".to_string(), Value::String("test-scope".to_string()));
-
-        if token == self.valid_token {
-            Ok(TokenClaims {
-                sub: "test-user".to_string(),
-                iss: "test-issuer".to_string(),
-                aud: "s3-proxy".to_string(),
-                iat: 0,
-                exp: 9999999999,
-                nbf: None,
-                custom,
-            })
-        } else {
-            Err(JwtVerificationError::InvalidSignature)
-        }
-    }
 }
