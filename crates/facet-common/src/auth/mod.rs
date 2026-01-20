@@ -81,6 +81,13 @@ pub trait AuthorizationEvaluator: Sync + Send {
     ) -> Result<bool, AuthorizationError>;
 }
 
+/// Stores rules for a participant.
+pub trait RuleStore: Send + Sync {
+    fn get_rules(&self, participant_context: &ParticipantContext) -> Result<Vec<Rule>, AuthorizationError>;
+    fn save_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError>;
+    fn remove_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError>;
+}
+
 pub struct TrueAuthorizationEvaluator {}
 
 impl TrueAuthorizationEvaluator {
@@ -99,6 +106,8 @@ impl AuthorizationEvaluator for TrueAuthorizationEvaluator {
 pub enum AuthorizationError {
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("Store error: {0}")]
+    StoreError(String),
     #[error("Invalid regex pattern: {0}")]
     InvalidRegex(String),
 }

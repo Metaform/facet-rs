@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, Rule};
+use crate::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, Rule, RuleStore};
 use crate::context::ParticipantContext;
 use crate::proxy::s3::opparser::DefaultS3OperationParser;
 use crate::proxy::s3::{S3OperationParser, S3Resources};
@@ -33,8 +33,12 @@ fn create_participant(identifier: &str) -> ParticipantContext {
 
 /// Helper function to set up rules for a participant
 fn setup_rules(evaluator: &MemoryAuthorizationEvaluator, participant_id: &str, rules: Vec<Rule>) {
+    let ctx = &ParticipantContext {
+        identifier: participant_id.to_string(),
+        audience: "test-audience".to_string(),
+    };
     for rule in rules {
-        evaluator.add_rule(participant_id.to_string(), rule);
+        evaluator.save_rule(ctx, rule).unwrap();
     }
 }
 

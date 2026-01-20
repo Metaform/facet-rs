@@ -10,24 +10,21 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use super::mocks::{
-    PassthroughCredentialsResolver,
-    TestJwtVerifier, TokenMatchingJwtVerifier,
-};
+use super::mocks::{PassthroughCredentialsResolver, TestJwtVerifier, TokenMatchingJwtVerifier};
 use super::{MINIO_ACCESS_KEY, MINIO_SECRET_KEY};
 use aws_config::Region;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
 use aws_smithy_runtime_api::client::behavior_version::BehaviorVersion;
-use facet_common::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator};
+use facet_common::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, RuleStore};
 use facet_common::context::ParticipantContext;
 use facet_common::jwt::JwtVerifier;
 use facet_common::proxy::s3::{
-    DefaultS3OperationParser, ParticipantContextResolver, S3CredentialResolver, S3Credentials,
-    S3OperationParser, S3Proxy, StaticParticipantContextResolver, UpstreamStyle,
+    DefaultS3OperationParser, ParticipantContextResolver, S3CredentialResolver, S3Credentials, S3OperationParser,
+    S3Proxy, StaticParticipantContextResolver, UpstreamStyle,
 };
-use pingora::server::configuration::Opt;
 use pingora::server::Server;
+use pingora::server::configuration::Opt;
 use pingora_proxy::http_proxy_service;
 use std::sync::Arc;
 
@@ -133,13 +130,14 @@ impl ProxyConfig {
         });
 
         let auth_evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-        let rule = facet_common::auth::Rule::new(
-            scope,
-            vec!["s3:GetObject".to_string()],
-            ".*".to_string(),
-        )
-        .expect("Failed to create authorization rule");
-        auth_evaluator.add_rule("proxy".to_string(), rule);
+        let rule = facet_common::auth::Rule::new(scope, vec!["s3:GetObject".to_string()], ".*".to_string())
+            .expect("Failed to create authorization rule");
+        let ctx = &ParticipantContext {
+            identifier: "proxy".to_string(),
+            audience: "test-audience".to_string(),
+        };
+
+        auth_evaluator.save_rule(ctx, rule).unwrap();
 
         Self {
             port,
@@ -186,7 +184,9 @@ impl ProxyConfig {
 /// Launch S3 proxy with the given configuration
 pub fn launch_s3proxy(config: ProxyConfig) {
     std::thread::spawn(move || {
-        let operation_parser = config.operation_parser.unwrap_or_else(|| Arc::new(DefaultS3OperationParser::new()));
+        let operation_parser = config
+            .operation_parser
+            .unwrap_or_else(|| Arc::new(DefaultS3OperationParser::new()));
 
         let proxy = S3Proxy::builder()
             .use_tls(false)
@@ -237,6 +237,10 @@ pub fn add_auth_rule(
     )
     .unwrap();
 
-    evaluator.add_rule(participant_id.to_string(), rule);
-}
+    let ctx = &ParticipantContext {
+        identifier: participant_id.to_string(),
+        audience: "test-audience".to_string(),
+    };
 
+    evaluator.save_rule(ctx, rule).unwrap();
+}

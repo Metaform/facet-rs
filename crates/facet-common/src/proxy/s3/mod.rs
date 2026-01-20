@@ -29,7 +29,7 @@
 //! 1. **Parse incoming request**: Extract bucket and key from either:
 //!    - Path-style: `/bucket/key` (e.g., `/my-bucket/path/to/file.txt`)
 //!    - Virtual-hosted-style: `bucket.proxy.com/key`
-//!    - **Note**: Parsing happens once in `upstream_peer` and is cached in session context
+//!    - **Note**: Parsing happens once in `upstream_peer` and is cached in the session context
 //!
 //! 2. **Validate JWT token**: Check `x-amz-security-token` header
 //!

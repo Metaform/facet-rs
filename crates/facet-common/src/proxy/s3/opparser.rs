@@ -28,7 +28,7 @@ use super::internal_error;
 /// This parser follows AWS S3's operation model where the action is determined by:
 /// - HTTP Method (GET, PUT, POST, DELETE, HEAD)
 /// - Query parameters (e.g., `?acl`, `?tagging`, `?list-type=2`)
-/// - Request path (bucket-only vs bucket+key)
+/// - Request path (bucket-only vs. bucket+key)
 ///
 /// # Examples
 ///

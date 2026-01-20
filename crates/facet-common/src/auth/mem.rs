@@ -10,7 +10,7 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::auth::{AuthorizationError, AuthorizationEvaluator, Operation, Rule};
+use crate::auth::{AuthorizationError, AuthorizationEvaluator, Operation, Rule, RuleStore};
 use crate::context::ParticipantContext;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -26,16 +26,6 @@ impl MemoryAuthorizationEvaluator {
             rules: RwLock::new(HashMap::new()),
         }
     }
-
-    pub fn add_rule(&self, participant_id: String, rule: Rule) {
-        let mut rules = self.rules.write().unwrap();
-        rules
-            .entry(participant_id)
-            .or_insert_with(HashMap::new)
-            .entry(rule.scope.clone())
-            .or_insert_with(Vec::new)
-            .push(rule);
-    }
 }
 
 impl AuthorizationEvaluator for MemoryAuthorizationEvaluator {
@@ -44,10 +34,7 @@ impl AuthorizationEvaluator for MemoryAuthorizationEvaluator {
         participant_context: &ParticipantContext,
         operation: Operation,
     ) -> Result<bool, AuthorizationError> {
-        let rules = self
-            .rules
-            .read()
-            .map_err(|e| AuthorizationError::InternalError(format!("Failed to acquire lock: {}", e)))?;
+        let rules = self.rules.read().map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?;
 
         // Check if rules exist for this participant
         let Some(participant_rules) = rules.get(&participant_context.identifier) else {
@@ -65,5 +52,63 @@ impl AuthorizationEvaluator for MemoryAuthorizationEvaluator {
             }
         }
         Ok(false)
+    }
+}
+
+impl RuleStore for MemoryAuthorizationEvaluator {
+    fn get_rules(&self, participant_context: &ParticipantContext) -> Result<Vec<Rule>, AuthorizationError> {
+        let rules = self.rules.read().map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?;
+
+        let Some(participant_rules) = rules.get(&participant_context.identifier) else {
+            return Ok(Vec::new());
+        };
+
+        let all_rules: Vec<Rule> = participant_rules
+            .values()
+            .flat_map(|scope_rules| scope_rules.iter().cloned())
+            .collect();
+
+        Ok(all_rules)
+    }
+
+    fn save_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError> {
+        let mut rules = self.rules.write().map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?;
+
+        rules
+            .entry(participant_context.identifier.clone())
+            .or_insert_with(HashMap::new)
+            .entry(rule.scope.clone())
+            .or_insert_with(Vec::new)
+            .push(rule);
+
+        Ok(())
+    }
+
+    fn remove_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError> {
+        let mut rules = self.rules.write().map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?;
+
+        let Some(participant_rules) = rules.get_mut(&participant_context.identifier) else {
+            return Ok(());
+        };
+
+        let Some(scope_rules) = participant_rules.get_mut(&rule.scope) else {
+            return Ok(());
+        };
+
+        scope_rules.retain(|r| {
+            !(r.scope == rule.scope &&
+              r.actions == rule.actions &&
+              r.resource == rule.resource)
+        });
+
+        if scope_rules.is_empty() {
+            participant_rules.remove(&rule.scope);
+        }
+
+        if participant_rules.is_empty() {
+            rules.remove(&participant_context.identifier);
+        }
+
+        Ok(())
     }
 }
