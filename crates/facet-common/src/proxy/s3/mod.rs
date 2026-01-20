@@ -68,8 +68,8 @@ use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, si
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use bon::Builder;
-use pingora_core::Result;
 use pingora_core::upstreams::peer::HttpPeer;
+use pingora_core::{Error, ErrorType, Result};
 use pingora_http::RequestHeader;
 use pingora_proxy::{ProxyHttp, Session};
 use serde_json::{Map, Value};
@@ -181,7 +181,7 @@ impl S3Proxy {
         }
 
         // Fallback error
-        Err(internal_error(format!("Cannot parse S3 request from path: {}", path)))
+        Err(client_error(400, format!("Invalid path format: {}", path)))
     }
 
     pub(crate) fn try_parse_path_style(path: &str) -> Option<ParsedS3Request> {
@@ -219,9 +219,9 @@ impl S3Proxy {
     pub(crate) fn parse_endpoint(&self, endpoint: &str) -> Result<(String, u16)> {
         match endpoint.rsplit_once(':') {
             Some((hostname, port_str)) => {
-                let port = port_str
-                    .parse::<u16>()
-                    .map_err(|e| internal_error(format!("Invalid port '{}': {}", port_str, e)))?;
+                let port = port_str.parse::<u16>().map_err(|e| {
+                    internal_error(format!("Invalid port '{}' in endpoint '{}': {}", port_str, endpoint, e))
+                })?;
                 Ok((hostname.to_string(), port))
             }
             None => Ok((endpoint.to_string(), self.default_port)),
@@ -229,16 +229,13 @@ impl S3Proxy {
     }
 
     /// Extract host and path from the request header
-    pub(crate) fn extract_request_components<'a>(
-        &self,
-        req_header: &'a RequestHeader,
-    ) -> Result<(&'a str, &'a str)> {
+    pub(crate) fn extract_request_components<'a>(&self, req_header: &'a RequestHeader) -> Result<(&'a str, &'a str)> {
         let path = req_header.uri.path();
         let host = req_header
             .headers
             .get(HOST)
             .and_then(|h| h.to_str().ok())
-            .ok_or_else(|| internal_error("Missing Host header"))?;
+            .ok_or_else(|| client_error(400, "Missing Host header"))?;
         Ok((host, path))
     }
 
@@ -325,7 +322,7 @@ impl ProxyHttp for S3Proxy {
         let parsed = ctx
             .parsed_request
             .as_ref()
-            .ok_or_else(|| internal_error("Parsed request not found in context"))?;
+            .ok_or_else(|| internal_error("BUG: Parsed request not cached in context (programming error)"))?;
 
         // Reconstruct URI and Host based on upstream_style
         let (new_uri, new_host) = self.build_upstream_uri_and_host(parsed);
@@ -348,19 +345,19 @@ impl ProxyHttp for S3Proxy {
             .headers
             .get(SECURITY_TOKEN_HEADER)
             .and_then(|h| h.to_str().ok())
-            .ok_or_else(|| http_status_error(403, "Missing x-amz-security-token header"))?;
+            .ok_or_else(|| client_error(400, "Missing x-amz-security-token header"))?;
 
         // Verify token (remove from request if valid)
         let claims = self
             .token_verifier
             .verify_token(&ctx.participant_context, token)
-            .map_err(|e| http_status_error(403, format!("Invalid token: {}", e)))?;
+            .map_err(|e| client_error_because(403, "JWT token verification failed", e))?;
 
         let scope = claims
             .custom
             .get("scope")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| http_status_error(403, "Missing scope in token claims"))?
+            .ok_or_else(|| client_error(403, "Missing scope in token claims"))?
             .to_string();
 
         // Parse operation from request
@@ -370,10 +367,15 @@ impl ProxyHttp for S3Proxy {
         let is_authorized = self
             .auth_evaluator
             .evaluate(&ctx.participant_context, operation)
-            .map_err(|e| http_status_error(403, format!("Authorization error: {}", e)))?;
+            .map_err(|e| {
+                internal_error(format!(
+                    "Authorization evaluation failed for participant {}: {}",
+                    ctx.participant_context.identifier, e
+                ))
+            })?;
 
         if !is_authorized {
-            return Err(http_status_error(403, "Unauthorized operation"));
+            return Err(client_error(403, "Unauthorized operation"));
         }
 
         upstream_request.remove_header(SECURITY_TOKEN_HEADER);
@@ -383,7 +385,10 @@ impl ProxyHttp for S3Proxy {
         let uri = upstream_request.uri.to_string();
 
         // Build signing params
-        let creds = self.credential_resolver.resolve_credentials(&ctx.participant_context)?;
+        let creds = self
+            .credential_resolver
+            .resolve_credentials(&ctx.participant_context)
+            .map_err(|e| e.into_in())?; // Ensure the error is treated as an internal source
 
         let aws_creds = Credentials::new(&creds.access_key_id, &creds.secret_key, None, None, "facet-proxy");
 
@@ -400,7 +405,12 @@ impl ProxyHttp for S3Proxy {
             .time(SystemTime::now())
             .settings(settings)
             .build()
-            .map_err(|e| internal_error(format!("Failed to build signing params: {}", e)))?
+            .map_err(|e| {
+                internal_error(format!(
+                    "Failed to build signing params for region '{}': {}",
+                    creds.region, e
+                ))
+            })?
             .into();
 
         // Convert Pingora RequestHeader to http::Request for signing
@@ -411,9 +421,12 @@ impl ProxyHttp for S3Proxy {
             http_request = http_request.header(name, value);
         }
 
-        let http_request = http_request
-            .body("")
-            .map_err(|e| internal_error(format!("Failed to build HTTP request: {}", e)))?;
+        let http_request = http_request.body("").map_err(|e| {
+            internal_error(format!(
+                "Failed to build HTTP request for signing (method={}, uri={}): {}",
+                method, uri, e
+            ))
+        })?;
 
         // Sign the request
         let headers_vec: Vec<(String, String)> = http_request
@@ -449,16 +462,36 @@ impl ProxyHttp for S3Proxy {
     }
 }
 
-/// Helper to create internal errors with explanation
+/// Helper to create internal errors with explanation.
+/// Internal errors are logged but never sent to clients, so detailed messages are encouraged.
+/// Sets the error source to Internal.
 #[inline]
-pub(crate) fn internal_error(msg: impl Into<String>) -> Box<pingora_core::Error> {
-    pingora_core::Error::explain(pingora_core::ErrorType::InternalError, msg.into())
+pub(crate) fn internal_error(msg: impl Into<String>) -> Box<Error> {
+    Error::explain(ErrorType::InternalError, msg.into()).into_in()
 }
 
-/// Helper to create HTTP status errors with explanation
+/// Helper to create client-facing HTTP status errors.
+/// These become HTTP responses, so messages should be generic.
+/// Sets the error source to Downstream.
 #[inline]
-fn http_status_error(status: u16, msg: impl Into<String>) -> Box<pingora_core::Error> {
-    pingora_core::Error::explain(pingora_core::ErrorType::HTTPStatus(status), msg.into())
+pub(crate) fn client_error(status: u16, msg: impl Into<String>) -> Box<Error> {
+    Error::explain(ErrorType::HTTPStatus(status), msg.into()).into_down()
+}
+
+/// Helper to create client-facing HTTP status errors that wrap an underlying cause.
+/// Sets the error source to Downstream.
+#[inline]
+pub(crate) fn client_error_because<E: std::error::Error + Send + Sync + 'static>(
+    status: u16,
+    msg: impl Into<String>,
+    cause: E,
+) -> Box<Error> {
+    Error::because(
+        ErrorType::HTTPStatus(status),
+        msg.into(),
+        Box::new(cause) as Box<dyn std::error::Error + Send + Sync>,
+    )
+    .into_down()
 }
 
 /// Default no-op JWT verifier that accepts all tokens (for testing and pass-through mode)

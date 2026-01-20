@@ -15,8 +15,8 @@
 //! This module provides parsers that map HTTP requests to S3 IAM actions
 //! following AWS S3's operation model.
 
-use crate::auth::Operation;
 use super::S3OperationParser;
+use crate::auth::Operation;
 use pingora_core::Result;
 use pingora_http::RequestHeader;
 use url::Url;
@@ -55,11 +55,7 @@ impl DefaultS3OperationParser {
     }
 
     /// Parses the S3 action from HTTP method and query parameters
-    fn parse_action(
-        method: &str,
-        query_pairs: &[(String, String)],
-        is_bucket_op: bool,
-    ) -> String {
+    fn parse_action(method: &str, query_pairs: &[(String, String)], is_bucket_op: bool) -> String {
         // Check for query parameter-based operations first
         for (key, _value) in query_pairs {
             match (method, key.as_str()) {
@@ -105,10 +101,11 @@ impl S3OperationParser for DefaultS3OperationParser {
 
         // Parse URL to extract query parameters
         let url = if uri.starts_with("http://") || uri.starts_with("https://") {
-            Url::parse(&uri).map_err(|e| internal_error(format!("Failed to parse URI: {}", e)))?
+            Url::parse(&uri)
+                .map_err(|e| internal_error(format!("Failed to parse operation URI '{}' (method={}): {}", uri, method, e)))?
         } else {
             Url::parse(&format!("http://dummy{}", uri))
-                .map_err(|e| internal_error(format!("Failed to parse URI: {}", e)))?
+                .map_err(|e| internal_error(format!("Failed to parse relative URI '{}' (method={}): {}", uri, method, e)))?
         };
 
         // Collect query parameters
