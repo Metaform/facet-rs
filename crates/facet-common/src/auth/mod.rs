@@ -16,6 +16,7 @@ mod tests;
 mod mem;
 mod postgres;
 
+use bon::Builder;
 use crate::context::ParticipantContext;
 use regex::Regex;
 use thiserror::Error;
@@ -30,7 +31,7 @@ pub use postgres::PostgresAuthorizationEvaluator;
 /// * `scope` - The scope or domain of the operation, for example, a contract agreement.
 /// * `action` - The specific action to be performed, such as "protocol::read", "write", or "protocol::delete".
 /// * `resource` - The resource on which the action will be performed.
-#[derive(bon::Builder, Debug, Clone)]
+#[derive(Builder, Debug, Clone)]
 pub struct Operation {
     #[builder(into)]
     pub scope: String,
