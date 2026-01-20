@@ -466,7 +466,7 @@ impl ProxyHttp for S3Proxy {
 /// Internal errors are logged but never sent to clients, so detailed messages are encouraged.
 /// Sets the error source to Internal.
 #[inline]
-pub(crate) fn internal_error(msg: impl Into<String>) -> Box<Error> {
+pub fn internal_error(msg: impl Into<String>) -> Box<Error> {
     Error::explain(ErrorType::InternalError, msg.into()).into_in()
 }
 
