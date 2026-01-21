@@ -102,12 +102,19 @@ impl MinioInstance {
         let config = build_minio_client_config(&self.endpoint).await;
         let client = Client::new(&config);
 
-        client
+        let create_result = client
             .create_bucket()
             .bucket(bucket)
             .send()
-            .await
-            .expect("Failed to create bucket");
+            .await;
+
+        // Ignore bucket-already-exists errors (MinIO may persist state between test runs)
+        if let Err(e) = create_result {
+            let error_msg = format!("{:?}", e);
+            if !error_msg.contains("BucketAlreadyOwnedByYou") && !error_msg.contains("BucketAlreadyExists") {
+                panic!("Failed to create bucket: {:?}", e);
+            }
+        }
 
         client
             .put_object()

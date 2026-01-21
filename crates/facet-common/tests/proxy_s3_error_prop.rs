@@ -53,7 +53,7 @@ async fn test_credential_resolver_failure_does_not_leak_details() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    ));
+    )).await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -101,7 +101,7 @@ async fn test_authorization_evaluator_failure_does_not_leak_details() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    ));
+    )).await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -152,7 +152,7 @@ async fn test_operation_parser_failure_does_not_leak_details() {
         Arc::new(FailingOperationParser {
             internal_detail: internal_detail.to_string(),
         }),
-    ));
+    )).await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -191,7 +191,7 @@ async fn test_aws_signing_with_suspicious_credentials_does_not_leak() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    ));
+    )).await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -239,7 +239,7 @@ async fn test_jwt_verification_failure_message_is_generic() {
             internal_detail: internal_service.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    ));
+    )).await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -283,7 +283,7 @@ async fn test_internal_failures_use_generic_messages() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    ));
+    )).await;
 
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
     let config = aws_config::defaults(BehaviorVersion::latest())

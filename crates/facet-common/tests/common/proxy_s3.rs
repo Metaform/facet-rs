@@ -182,7 +182,9 @@ impl ProxyConfig {
 }
 
 /// Launch S3 proxy with the given configuration
-pub fn launch_s3proxy(config: ProxyConfig) {
+pub async fn launch_s3proxy(config: ProxyConfig) {
+    let port = config.port;
+
     std::thread::spawn(move || {
         let operation_parser = config
             .operation_parser
@@ -212,14 +214,28 @@ pub fn launch_s3proxy(config: ProxyConfig) {
         server.bootstrap();
 
         let mut proxy_service = http_proxy_service(&server.configuration, proxy);
-        proxy_service.add_tcp(&format!("0.0.0.0:{}", config.port));
+        proxy_service.add_tcp(&format!("0.0.0.0:{}", port));
 
         server.add_service(proxy_service);
         server.run_forever();
     });
 
-    // Give the server time to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Wait for proxy to be ready with 5-second timeout
+    let wait_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(5),
+        async {
+            loop {
+                if tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.is_ok() {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        }
+    ).await;
+
+    if wait_result.is_err() {
+        panic!("Proxy failed to start within 5 seconds on port {}", port);
+    }
 }
 
 /// Add an authorization rule to an evaluator.

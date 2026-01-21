@@ -35,7 +35,7 @@ async fn test_e2e_allow_get_object() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/test-file.txt$", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -67,7 +67,7 @@ async fn test_e2e_allow_get_object_with_wildcard() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -96,7 +96,7 @@ async fn test_e2e_allow_head_object() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -125,7 +125,7 @@ async fn test_e2e_allow_put_object() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:PutObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -155,7 +155,7 @@ async fn test_e2e_allow_delete_object() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:DeleteObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -184,7 +184,7 @@ async fn test_e2e_allow_list_bucket() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:ListBucket"], &format!("^/{}/?$", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -207,7 +207,7 @@ async fn test_e2e_deny_wrong_action() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -236,7 +236,7 @@ async fn test_e2e_deny_wrong_resource_pattern() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/public/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -264,7 +264,7 @@ async fn test_e2e_deny_read_only_user_trying_to_write() {
     add_auth_rule(&evaluator, "readonly_user", TEST_BUCKET, vec!["s3:GetObject", "s3:ListBucket"], &format!("^/{}.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "readonly_user", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "readonly_user", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -293,7 +293,7 @@ async fn test_e2e_multiple_actions_in_single_rule() {
     add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -342,7 +342,7 @@ async fn test_e2e_readonly_access_to_entire_bucket() {
     add_auth_rule(&evaluator, "analyst", TEST_BUCKET, vec!["s3:ListBucket"], &format!("^/{}/?$", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "analyst", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "analyst", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -416,7 +416,7 @@ async fn test_e2e_folder_specific_access() {
     add_auth_rule(&evaluator, "user123", TEST_BUCKET, vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], &format!("^/{}/users/user123/.*", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user123", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user123", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -476,7 +476,7 @@ async fn test_e2e_regex_pattern_with_file_extension() {
     add_auth_rule(&evaluator, "image-processor", TEST_BUCKET, vec!["s3:GetObject"], &format!(r"^/{}/.*\.(jpg|jpeg|png|gif)$", TEST_BUCKET)).await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "image-processor", TEST_BUCKET));
+    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "image-processor", TEST_BUCKET)).await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
