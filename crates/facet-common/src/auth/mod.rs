@@ -10,6 +10,21 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+//! Authorization and access control module.
+//!
+//! This module provides functionality for evaluating whether operations are authorized for participants
+//! based on configurable rules. It defines the core abstractions for operations, rules, and authorization
+//! evaluation, along with storage mechanisms for managing participant-specific access rules.
+//!
+//! The module includes:
+//! - `Operation`: Represents an operation with scope, action, and resource attributes
+//! - `Rule`: Defines access constraints with regex-based resource matching
+//! - `AuthorizationEvaluator`: Trait for evaluating operation authorization
+//! - `RuleStore`: Trait for persisting and retrieving authorization rules
+//! - `MemoryAuthorizationEvaluator`: In-memory implementation
+//! - `PostgresAuthorizationEvaluator`: PostgreSQL-backed implementation
+//! - `TrueAuthorizationEvaluator`: Pass-through evaluator that always permits operations
+
 #[cfg(test)]
 mod tests;
 
