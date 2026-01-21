@@ -39,7 +39,7 @@ pub async fn setup_postgres_container() -> (PgPool, testcontainers::ContainerAsy
         }
     )
     .await
-    .unwrap_or_else(|_| panic!("PostgreSQL failed to become ready within 5 seconds"));
+    .unwrap_or_else(|_| panic!("PostgreSQL launch failed"));
 
     (pool, container)
 }
