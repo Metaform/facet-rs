@@ -18,9 +18,9 @@ use common::{
     MINIO_ACCESS_KEY, MINIO_SECRET_KEY, TEST_BUCKET,
 };
 use facet_common::auth::{AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore};
-use facet_common::context::ParticipantContext;
+use facet_common::context::{ParticipantContext, StaticParticipantContextResolver};
 use facet_common::proxy::s3::{
-    DefaultS3OperationParser, S3Credentials, StaticParticipantContextResolver, UpstreamStyle,
+    DefaultS3OperationParser, S3Credentials, UpstreamStyle,
 };
 use std::sync::Arc;
 

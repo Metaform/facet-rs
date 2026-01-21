@@ -27,3 +27,19 @@ pub struct ParticipantContext {
     #[builder(into, default = "anonymous")]
     pub audience: String,
 }
+
+/// Resolves the participant context for a given request URL.
+pub trait ParticipantContextResolver: Sync + Send {
+    fn resolve(&self, url: &str) -> pingora::Result<ParticipantContext>;
+}
+
+pub struct StaticParticipantContextResolver {
+    pub participant_context: ParticipantContext,
+}
+
+impl ParticipantContextResolver for StaticParticipantContextResolver {
+    fn resolve(&self, _url: &str) -> pingora::Result<ParticipantContext> {
+        Ok(self.participant_context.clone())
+    }
+}
+

@@ -49,6 +49,7 @@ pub async fn setup_postgres_container() -> (PgPool, testcontainers::ContainerAsy
 ///
 /// PostgreSQL stores timestamps with microsecond precision, so this helper ensures test assertions
 /// account for the precision loss when round-tripping timestamps through the database.
+#[allow(dead_code)]
 pub fn truncate_to_micros(dt: DateTime<Utc>) -> DateTime<Utc> {
     let micros = dt.timestamp_micros();
     DateTime::from_timestamp_micros(micros).expect("Invalid timestamp")

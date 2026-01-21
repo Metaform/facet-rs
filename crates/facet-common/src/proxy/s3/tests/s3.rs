@@ -11,7 +11,7 @@
 //
 
 use super::super::*;
-use crate::context::ParticipantContext;
+use crate::context::{ParticipantContext, StaticParticipantContextResolver};
 use std::sync::Arc;
 use crate::auth::TrueAuthorizationEvaluator;
 

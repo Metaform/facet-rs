@@ -17,11 +17,11 @@ use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
 use aws_smithy_runtime_api::client::behavior_version::BehaviorVersion;
 use facet_common::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, RuleStore};
-use facet_common::context::ParticipantContext;
+use facet_common::context::{ParticipantContext, ParticipantContextResolver, StaticParticipantContextResolver};
 use facet_common::jwt::JwtVerifier;
 use facet_common::proxy::s3::{
-    DefaultS3OperationParser, ParticipantContextResolver, S3CredentialResolver, S3Credentials, S3OperationParser,
-    S3Proxy, StaticParticipantContextResolver, UpstreamStyle,
+    DefaultS3OperationParser, S3CredentialResolver, S3Credentials, S3OperationParser,
+    S3Proxy, UpstreamStyle,
 };
 use pingora::server::Server;
 use pingora::server::configuration::Opt;

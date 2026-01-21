@@ -60,11 +60,11 @@ pub mod opparser;
 mod tests;
 
 use crate::auth::{AuthorizationEvaluator, Operation};
-use crate::context::ParticipantContext;
+use crate::context::{ParticipantContext, ParticipantContextResolver};
 use crate::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
 use async_trait::async_trait;
 use aws_credential_types::Credentials;
-use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
+use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use bon::Builder;
@@ -122,11 +122,6 @@ pub struct S3ProxyContext {
 /// Resolves credentials for a given participant context.
 pub trait S3CredentialResolver: Sync + Send {
     fn resolve_credentials(&self, context: &ParticipantContext) -> Result<S3Credentials>;
-}
-
-/// Resolves the participant context for a given request URL.
-pub trait ParticipantContextResolver: Sync + Send {
-    fn resolve(&self, url: &str) -> Result<ParticipantContext>;
 }
 
 pub trait S3OperationParser: Sync + Send {
@@ -527,12 +522,3 @@ impl S3CredentialResolver for StaticCredentialsResolver {
     }
 }
 
-pub struct StaticParticipantContextResolver {
-    pub participant_context: ParticipantContext,
-}
-
-impl ParticipantContextResolver for StaticParticipantContextResolver {
-    fn resolve(&self, _url: &str) -> Result<ParticipantContext> {
-        Ok(self.participant_context.clone())
-    }
-}
