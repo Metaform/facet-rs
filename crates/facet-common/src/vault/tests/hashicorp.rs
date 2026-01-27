@@ -98,7 +98,7 @@ async fn test_record_renewal_error_updates_state() {
     let state = renewed_state();
     let renewer = create_test_renewer(Arc::clone(&state), None);
 
-    let error = VaultError::GeneralError("Network error".to_string());
+    let error = VaultError::NetworkError("Network error".to_string());
     let mut state_guard = state.write().await;
     renewer.record_renewal_error(&mut state_guard, &error);
 
@@ -112,7 +112,7 @@ async fn test_record_renewal_error_increments_failures() {
     let state = failing_state(3);
     let renewer = create_test_renewer(Arc::clone(&state), None);
 
-    let error = VaultError::GeneralError("Another error".to_string());
+    let error = VaultError::NetworkError("Another error".to_string());
     let mut state_guard = state.write().await;
     renewer.record_renewal_error(&mut state_guard, &error);
 
@@ -132,7 +132,7 @@ async fn test_record_renewal_error_invokes_callback() {
 
     let renewer = create_test_renewer(Arc::clone(&state), Some(callback));
 
-    let error = VaultError::GeneralError("Test error".to_string());
+    let error = VaultError::NetworkError("Test error".to_string());
     let mut state_guard = state.write().await;
     renewer.record_renewal_error(&mut state_guard, &error);
 

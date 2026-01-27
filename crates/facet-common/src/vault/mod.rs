@@ -36,14 +36,32 @@ pub trait VaultClient: Send + Sync {
 
 #[derive(Debug, Error)]
 pub enum VaultError {
-    #[error("Secret not found for identifier: {identifier}")]
-    SecretNotFound { identifier: String },
+    #[error("Secret not found: {0}")]
+    SecretNotFound(String),
 
-    #[error("Token has expired and must be renewed")]
-    TokenExpired,
+    #[error("Network error: {0}")]
+    NetworkError(String),
 
-    #[error("General token error: {0}")]
-    GeneralError(String),
+    #[error("Authentication error: {0}")]
+    AuthenticationError(String),
+
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
+
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+
+    #[error("Client not initialized: {0}")]
+    NotInitializedError(String),
+}
+
+impl VaultError {
+    pub fn is_retriable(&self) -> bool {
+        matches!(
+            self,
+            VaultError::NetworkError(_) | VaultError::AuthenticationError(_)
+        )
+    }
 }
 
 /// In-memory vault client for testing.
@@ -59,9 +77,7 @@ impl VaultClient for MemoryVaultClient {
             .unwrap()
             .get(get_path(participant_context, path).as_str())
             .cloned()
-            .ok_or(VaultError::SecretNotFound {
-                identifier: path.to_string(),
-            })
+            .ok_or(VaultError::SecretNotFound(path.to_string()))
     }
 
     async fn store_secret(

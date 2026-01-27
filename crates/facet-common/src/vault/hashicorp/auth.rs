@@ -72,7 +72,7 @@ pub(crate) async fn get_vault_access_token(
         .form(&params)
         .send()
         .await
-        .map_err(|e| VaultError::GeneralError(format!("Failed to request access token: {}", e)))?;
+        .map_err(|e| VaultError::NetworkError(format!("Failed to request access token: {}", e)))?;
 
     if !response.status().is_success() {
         return Err(handle_error_response(response, "Token request failed").await);
@@ -81,12 +81,10 @@ pub(crate) async fn get_vault_access_token(
     let token_response: TokenResponse = response
         .json()
         .await
-        .map_err(|e| VaultError::GeneralError(format!("Failed to parse token response: {}", e)))?;
+        .map_err(|e| VaultError::InvalidData(format!("Failed to parse token response: {}", e)))?;
 
     if token_response.access_token.is_empty() {
-        return Err(VaultError::GeneralError(
-            "Access token not found in response".to_string(),
-        ));
+        return Err(VaultError::AuthenticationError("Access token not found in response".to_string()));
     }
 
     Ok(token_response.access_token)
@@ -110,7 +108,7 @@ pub(crate) async fn jwt_login(
         .json(&request)
         .send()
         .await
-        .map_err(|e| VaultError::GeneralError(format!("Failed to authenticate with JWT: {}", e)))?;
+        .map_err(|e| VaultError::NetworkError(format!("Failed to authenticate with JWT: {}", e)))?;
 
     if !response.status().is_success() {
         return Err(handle_error_response(response, "JWT login failed").await);
@@ -119,7 +117,7 @@ pub(crate) async fn jwt_login(
     let login_response: JwtLoginResponse = response
         .json()
         .await
-        .map_err(|e| VaultError::GeneralError(format!("Failed to parse JWT login response: {}", e)))?;
+        .map_err(|e| VaultError::InvalidData(format!("Failed to parse JWT login response: {}", e)))?;
 
     Ok((login_response.auth.client_token, login_response.auth.lease_duration))
 }
@@ -128,7 +126,17 @@ pub(crate) async fn jwt_login(
 pub(crate) async fn handle_error_response(response: reqwest::Response, context: &str) -> VaultError {
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
-    VaultError::GeneralError(format!("{} with status {}: {}", context, status, body))
+    let message = format!("{} with status {}: {}", context, status, body);
+
+    match status.as_u16() {
+        400 => VaultError::InvalidData(message),
+        401 => VaultError::AuthenticationError(message),
+        403 => VaultError::PermissionDenied(message),
+        404 => VaultError::InvalidData(message),
+        429 => VaultError::NetworkError(message),
+        500..=599 => VaultError::NetworkError(message),
+        _ => VaultError::NetworkError(message),
+    }
 }
 
 /// OAuth2 token response structure

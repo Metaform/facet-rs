@@ -40,7 +40,7 @@ impl HashicorpVaultClient {
         let http_client = Client::builder()
             .timeout(config.request_timeout)
             .build()
-            .map_err(|e| VaultError::GeneralError(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| VaultError::InvalidData(format!("Failed to create HTTP client: {}", e)))?;
 
         let clock = config.clock.clone();
 
@@ -58,7 +58,7 @@ impl HashicorpVaultClient {
     /// This method must be called before using any vault operations.
     pub async fn initialize(&mut self) -> Result<(), VaultError> {
         if self.state.is_some() {
-            return Err(VaultError::GeneralError("Client is already initialized".to_string()));
+            return Err(VaultError::NotInitializedError("Already initialized".to_string()));
         }
 
         // Create auth client
@@ -157,7 +157,7 @@ impl HashicorpVaultClient {
     fn ensure_initialized(&self) -> Result<&Arc<RwLock<VaultClientState>>, VaultError> {
         self.state
             .as_ref()
-            .ok_or_else(|| VaultError::GeneralError("Client not initialized. Call initialize() first.".to_string()))
+            .ok_or_else(|| VaultError::NotInitializedError("Call initialize() first.".to_string()))
     }
 }
 
@@ -177,12 +177,10 @@ impl VaultClient for HashicorpVaultClient {
             .header("X-Vault-Token", &token)
             .send()
             .await
-            .map_err(|e| VaultError::GeneralError(format!("Failed to read secret: {}", e)))?;
+            .map_err(|e| VaultError::NetworkError(format!("Failed to read secret: {}", e)))?;
 
         if response.status() == StatusCode::NOT_FOUND {
-            return Err(VaultError::SecretNotFound {
-                identifier: path.to_string(),
-            });
+            return Err(VaultError::SecretNotFound(path.to_string()));
         }
 
         if !response.status().is_success() {
@@ -192,7 +190,7 @@ impl VaultClient for HashicorpVaultClient {
         let read_response: KvV2ReadResponse = response
             .json()
             .await
-            .map_err(|e| VaultError::GeneralError(format!("Failed to parse secret response: {}", e)))?;
+            .map_err(|e| VaultError::InvalidData(format!("Failed to parse secret response: {}", e)))?;
 
         read_response
             .data
@@ -200,7 +198,7 @@ impl VaultClient for HashicorpVaultClient {
             .get(CONTENT_KEY)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
-            .ok_or_else(|| VaultError::GeneralError("Content field not found or not a string".to_string()))
+            .ok_or_else(|| VaultError::InvalidData("Content field not found or not a string".to_string()))
     }
 
     async fn store_secret(
@@ -230,7 +228,7 @@ impl VaultClient for HashicorpVaultClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| VaultError::GeneralError(format!("Failed to write secret: {}", e)))?;
+            .map_err(|e| VaultError::NetworkError(format!("Failed to write secret: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(handle_error_response(response, &format!("Failed to write secret to path {}", path)).await);
@@ -260,7 +258,7 @@ impl VaultClient for HashicorpVaultClient {
             .header("X-Vault-Token", &token)
             .send()
             .await
-            .map_err(|e| VaultError::GeneralError(format!("Failed to delete secret: {}", e)))?;
+            .map_err(|e| VaultError::NetworkError(format!("Failed to delete secret: {}", e)))?;
 
         if !response.status().is_success() {
             return Err(handle_error_response(response, &format!("Failed to delete secret at path {}", path)).await);

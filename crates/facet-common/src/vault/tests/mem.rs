@@ -49,7 +49,7 @@ async fn test_resolve_nonexistent_secret() {
 
     assert!(result.is_err());
     match result {
-        Err(VaultError::SecretNotFound { identifier }) => {
+        Err(VaultError::SecretNotFound(identifier)) => {
             assert_eq!(identifier, "nonexistent/path");
         }
         _ => panic!("Expected SecretNotFound error"),
@@ -286,7 +286,7 @@ async fn test_resolve_nonexistent_for_different_participant() {
     let result = client.resolve_secret(&ctx2, "test/path").await;
     assert!(result.is_err());
     match result {
-        Err(VaultError::SecretNotFound { identifier }) => {
+        Err(VaultError::SecretNotFound(identifier)) => {
             assert_eq!(identifier, "test/path");
         }
         _ => panic!("Expected SecretNotFound error"),

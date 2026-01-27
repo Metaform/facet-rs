@@ -127,7 +127,7 @@ impl TokenRenewer {
                             self.update_state_on_success(&mut state);
                         }
                         Err(e) => {
-                            if matches!(e, VaultError::TokenExpired) {
+                            if matches!(e, VaultError::AuthenticationError(_)) {
                                 self.handle_token_expiration().await;
                             } else {
                                 let mut state = self.state.write().await;
@@ -159,21 +159,23 @@ impl TokenRenewer {
             .json(&request)
             .send()
             .await
-            .map_err(|e| VaultError::GeneralError(format!("Failed to renew token: {}", e)))?;
+            .map_err(|e| VaultError::NetworkError(format!("Failed to renew token: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            let message = format!("Token renewal failed with status {}: {}", status, body);
 
             // Check if the token is invalid (expired)
             if body.contains("invalid token") || body.contains("permission denied") {
-                return Err(VaultError::TokenExpired);
+                return Err(VaultError::AuthenticationError(message));
             }
 
-            return Err(VaultError::GeneralError(format!(
-                "Token renewal failed with status {}: {}",
-                status, body
-            )));
+            return Err(match status.as_u16() {
+                403 => VaultError::PermissionDenied(message),
+                429 | 500..=599 => VaultError::NetworkError(message.clone()),
+                _ => VaultError::NetworkError(message),
+            });
         }
 
         Ok(())

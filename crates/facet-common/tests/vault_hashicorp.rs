@@ -14,8 +14,8 @@ mod common;
 
 use crate::common::{create_network, setup_keycloak_container, setup_vault_container};
 use facet_common::context::ParticipantContext;
-use facet_common::vault::hashicorp::{HashicorpVaultClient, HashicorpVaultConfig};
 use facet_common::vault::VaultClient;
+use facet_common::vault::hashicorp::{HashicorpVaultClient, HashicorpVaultConfig};
 
 fn create_test_context() -> ParticipantContext {
     ParticipantContext {
@@ -25,8 +25,8 @@ fn create_test_context() -> ParticipantContext {
     }
 }
 
-/// Integration tests for HashicorpVaultClient 
-/// 
+/// Integration tests for HashicorpVaultClient
+///
 /// All scenarios are combined in a single test to amortize the expensive container
 /// startup time (Vault + Keycloak).
 ///
@@ -49,12 +49,8 @@ async fn test_vault_client_integration() {
         "{}/realms/master/protocol/openid-connect/certs",
         keycloak_setup.keycloak_internal_url
     );
-    let (vault_url, _root_token, _vault_container) = setup_vault_container(
-        &network,
-        &jwks_url,
-        &keycloak_setup.keycloak_container_id,
-    )
-    .await;
+    let (vault_url, _root_token, _vault_container) =
+        setup_vault_container(&network, &jwks_url, &keycloak_setup.keycloak_container_id).await;
 
     // ============================================================================
     // SCENARIO 1: CRUD Operations with Soft Delete (Default)
@@ -68,8 +64,7 @@ async fn test_vault_client_integration() {
             .token_url(&keycloak_setup.token_url)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
         client.initialize().await.expect("Failed to initialize Vault client");
 
         // Test: Store a secret
@@ -125,7 +120,6 @@ async fn test_vault_client_integration() {
             .await
             .expect("Other secret should still be accessible");
         assert_eq!(still_there, "another-value");
-
     }
 
     // ============================================================================
@@ -140,8 +134,7 @@ async fn test_vault_client_integration() {
             .token_url(&keycloak_setup.token_url)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
         client.initialize().await.expect("Failed to initialize Vault client");
 
         // Try to read a non-existent secret
@@ -149,12 +142,11 @@ async fn test_vault_client_integration() {
         assert!(result.is_err(), "Expected error for non-existent secret");
 
         match result {
-            Err(facet_common::vault::VaultError::SecretNotFound { identifier }) => {
+            Err(facet_common::vault::VaultError::SecretNotFound(identifier)) => {
                 assert_eq!(identifier, "nonexistent/path");
             }
             _ => panic!("Expected SecretNotFound error"),
         }
-
     }
 
     // ============================================================================
@@ -170,8 +162,7 @@ async fn test_vault_client_integration() {
             .soft_delete(false)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
         client.initialize().await.expect("Failed to initialize Vault client");
 
         // Store a secret
@@ -193,7 +184,6 @@ async fn test_vault_client_integration() {
         // Verify it is removed
         let result = client.resolve_secret(&ctx, "test/hard-delete").await;
         assert!(result.is_err(), "Expected error after hard delete");
-
     }
 
     // ============================================================================
@@ -208,20 +198,31 @@ async fn test_vault_client_integration() {
             .token_url(&keycloak_setup.token_url)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
         client.initialize().await.expect("Failed to initialize Vault client");
 
         // Client should be healthy immediately after initialization
-        assert!(client.is_healthy().await, "Client should be healthy after initialization");
+        assert!(
+            client.is_healthy().await,
+            "Client should be healthy after initialization"
+        );
 
         // Last error should be None
         let last_error = client.last_error().await.expect("Should get last error");
-        assert!(last_error.is_none(), "Last error should be None after successful initialization");
+        assert!(
+            last_error.is_none(),
+            "Last error should be None after successful initialization"
+        );
 
         // Consecutive failures should be 0
-        let failures = client.consecutive_failures().await.expect("Should get consecutive failures");
-        assert_eq!(failures, 0, "Consecutive failures should be 0 after successful initialization");
+        let failures = client
+            .consecutive_failures()
+            .await
+            .expect("Should get consecutive failures");
+        assert_eq!(
+            failures, 0,
+            "Consecutive failures should be 0 after successful initialization"
+        );
 
         // Verify client can perform operations while healthy
         client
@@ -229,9 +230,11 @@ async fn test_vault_client_integration() {
             .await
             .expect("Healthy client should be able to store secrets");
 
-        let value = client.resolve_secret(&ctx, "test/health").await.expect("Should resolve secret");
+        let value = client
+            .resolve_secret(&ctx, "test/health")
+            .await
+            .expect("Should resolve secret");
         assert_eq!(value, "healthy-value");
-
     }
 
     // ============================================================================
@@ -246,17 +249,21 @@ async fn test_vault_client_integration() {
             .token_url(&keycloak_setup.token_url)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
 
         // Initialization should fail due to invalid credentials
         let init_result = client.initialize().await;
-        assert!(init_result.is_err(), "Initialization should fail with invalid credentials");
+        assert!(
+            init_result.is_err(),
+            "Initialization should fail with invalid credentials"
+        );
 
         // Client should not be usable after failed initialization
         let resolve_result = client.resolve_secret(&ctx, "test/any").await;
-        assert!(resolve_result.is_err(), "Operations should fail on uninitialized client");
-
+        assert!(
+            resolve_result.is_err(),
+            "Operations should fail on uninitialized client"
+        );
     }
 
     // ============================================================================
@@ -282,8 +289,7 @@ async fn test_vault_client_integration() {
             .token_url(&keycloak_setup.token_url)
             .build();
 
-        let mut client = HashicorpVaultClient::new(config)
-            .expect("Failed to create Vault client");
+        let mut client = HashicorpVaultClient::new(config).expect("Failed to create Vault client");
         client.initialize().await.expect("Failed to initialize Vault client");
 
         // Store secrets for both participants at the same path
@@ -318,7 +324,10 @@ async fn test_vault_client_integration() {
 
         // Participant 1's secret should be gone
         let result = client.resolve_secret(&ctx1, "shared/path").await;
-        assert!(result.is_err(), "Expected error when reading deleted secret for participant 1");
+        assert!(
+            result.is_err(),
+            "Expected error when reading deleted secret for participant 1"
+        );
 
         // Participant 2's secret should still be accessible
         let secret2_after = client
@@ -326,7 +335,5 @@ async fn test_vault_client_integration() {
             .await
             .expect("Participant 2's secret should still be accessible");
         assert_eq!(secret2_after, "secret-for-participant-2");
-
     }
-
 }
