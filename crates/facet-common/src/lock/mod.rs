@@ -143,7 +143,7 @@ impl Drop for LockGuard {
         // Drop if runtime is available, otherwise let the lock expire
         if let Ok(_handle) = tokio::runtime::Handle::try_current() {
             // Spawn the async unlock task
-            let _ = tokio::spawn(async move {
+            tokio::spawn(async move {
                 if let Err(e) = lock_manager.unlock(&identifier, &owner).await {
                     warn!(
                         "Failed to release lock for identifier '{}' owned by '{}': {}",

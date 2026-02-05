@@ -82,10 +82,10 @@ impl MemoryLockManager {
     }
 
     fn cleanup_expired_lock(&self, locks: &mut HashMap<String, LockRecord>, identifier: &str, timeout: TimeDelta) {
-        if let Some(lock) = locks.get(identifier) {
-            if self.is_expired(lock, timeout) {
-                locks.remove(identifier);
-            }
+        if let Some(lock) = locks.get(identifier)
+            && self.is_expired(lock, timeout)
+        {
+            locks.remove(identifier);
         }
     }
 }
@@ -152,10 +152,11 @@ impl LockManager for MemoryLockManager {
     async fn lock_count(&self, identifier: &str, owner: &str) -> Result<u32, LockError> {
         let locks = self.inner.locks.lock().unwrap();
 
-        if let Some(lock) = locks.get(identifier) {
-            if lock.owner == owner && !self.is_expired(lock, self.inner.timeout) {
-                return Ok(lock.reentrant_count as u32);
-            }
+        if let Some(lock) = locks.get(identifier)
+            && lock.owner == owner
+            && !self.is_expired(lock, self.inner.timeout)
+        {
+            return Ok(lock.reentrant_count as u32);
         }
 
         Ok(0)

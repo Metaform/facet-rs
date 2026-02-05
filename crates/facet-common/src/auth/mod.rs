@@ -115,6 +115,12 @@ pub trait RuleStore: Send + Sync {
 
 pub struct TrueAuthorizationEvaluator {}
 
+impl Default for TrueAuthorizationEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrueAuthorizationEvaluator {
     pub fn new() -> Self {
         Self {}

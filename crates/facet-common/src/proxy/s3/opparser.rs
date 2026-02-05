@@ -39,6 +39,12 @@ use super::internal_error;
 /// - `DELETE /bucket/key` → `s3:DeleteObject`
 pub struct DefaultS3OperationParser;
 
+impl Default for DefaultS3OperationParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultS3OperationParser {
     pub fn new() -> Self {
         Self

@@ -20,6 +20,12 @@ pub struct MemoryAuthorizationEvaluator {
     rules: RwLock<HashMap<String, HashMap<String, Vec<Rule>>>>,
 }
 
+impl Default for MemoryAuthorizationEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryAuthorizationEvaluator {
     pub fn new() -> Self {
         Self {

@@ -120,7 +120,7 @@ impl TokenClientApi {
             refresh_endpoint: refresh_endpoint.to_string(),
         };
 
-        let _ = self.token_store.save_token(data).await?;
+        self.token_store.save_token(data).await?;
         drop(guard);
         Ok(())
     }
@@ -137,7 +137,7 @@ impl TokenClientApi {
             .await
             .map_err(|e| TokenError::general_error(format!("Failed to acquire lock: {}", e)))?;
 
-        let _ = self.token_store.remove_token(participant_context, identifier).await?;
+        self.token_store.remove_token(participant_context, identifier).await?;
         drop(guard);
         Ok(())
     }

@@ -45,7 +45,7 @@ impl MockClock {
 
     pub fn advance(&self, duration: TimeDelta) {
         let mut time = self.current_time.lock().unwrap();
-        *time = *time + duration;
+        *time += duration;
     }
 
     pub fn set(&self, instant: DateTime<Utc>) {

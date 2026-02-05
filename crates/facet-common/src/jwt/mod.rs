@@ -29,6 +29,7 @@ use thiserror::Error;
 
 /// JWT token claims structure.
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
+#[allow(clippy::should_implement_trait)]
 pub struct TokenClaims {
     #[builder(into)]
     pub sub: String,
@@ -222,7 +223,7 @@ impl JwtVerifier for LocalJwtVerifier {
         // Extract kid from header (without verification)
         let header = decode_header(token).map_err(|_| JwtVerificationError::InvalidFormat)?;
 
-        let kid = header.kid.ok_or_else(|| JwtVerificationError::InvalidFormat)?;
+        let kid = header.kid.ok_or(JwtVerificationError::InvalidFormat)?;
 
         // Extract iss from payload (without verification, safe because we verify below)
         let unverified = insecure_decode::<TokenClaims>(token).map_err(|_| JwtVerificationError::InvalidFormat)?;
