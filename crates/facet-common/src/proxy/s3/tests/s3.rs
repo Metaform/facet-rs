@@ -11,9 +11,9 @@
 //
 
 use super::super::*;
+use crate::auth::TrueAuthorizationEvaluator;
 use crate::context::{ParticipantContext, StaticParticipantContextResolver};
 use std::sync::Arc;
-use crate::auth::TrueAuthorizationEvaluator;
 
 #[test]
 fn test_try_parse_path_style_with_key() {
@@ -100,19 +100,14 @@ fn test_parse_incoming_path_style() {
 #[test]
 fn test_parse_incoming_path_style_bucket_only() {
     let proxy = create_test_proxy(UpstreamStyle::PathStyle, None);
-    let parsed = proxy
-        .parse_incoming_request("proxy.com:6000", "/test-bucket")
-        .unwrap();
+    let parsed = proxy.parse_incoming_request("proxy.com:6000", "/test-bucket").unwrap();
     assert_eq!(parsed.bucket, "test-bucket");
     assert_eq!(parsed.key, "");
 }
 
 #[test]
 fn test_parse_incoming_virtual_hosted_with_proxy_domain() {
-    let proxy = create_test_proxy(
-        UpstreamStyle::PathStyle,
-        Some("proxy.com".to_string()),
-    );
+    let proxy = create_test_proxy(UpstreamStyle::PathStyle, Some("proxy.com".to_string()));
     let parsed = proxy
         .parse_incoming_request("test-bucket.proxy.com:6000", "/file.txt")
         .unwrap();
@@ -122,23 +117,15 @@ fn test_parse_incoming_virtual_hosted_with_proxy_domain() {
 
 #[test]
 fn test_parse_incoming_virtual_hosted_root_object() {
-    let proxy = create_test_proxy(
-        UpstreamStyle::PathStyle,
-        Some("proxy.com".to_string()),
-    );
-    let parsed = proxy
-        .parse_incoming_request("test-bucket.proxy.com", "/")
-        .unwrap();
+    let proxy = create_test_proxy(UpstreamStyle::PathStyle, Some("proxy.com".to_string()));
+    let parsed = proxy.parse_incoming_request("test-bucket.proxy.com", "/").unwrap();
     assert_eq!(parsed.bucket, "test-bucket");
     assert_eq!(parsed.key, "");
 }
 
 #[test]
 fn test_parse_incoming_virtual_hosted_no_leading_slash() {
-    let proxy = create_test_proxy(
-        UpstreamStyle::PathStyle,
-        Some("proxy.com".to_string()),
-    );
+    let proxy = create_test_proxy(UpstreamStyle::PathStyle, Some("proxy.com".to_string()));
     let parsed = proxy
         .parse_incoming_request("test-bucket.proxy.com", "file.txt")
         .unwrap();
@@ -148,14 +135,9 @@ fn test_parse_incoming_virtual_hosted_no_leading_slash() {
 
 #[test]
 fn test_parse_incoming_fallback_to_path_style() {
-    let proxy = create_test_proxy(
-        UpstreamStyle::PathStyle,
-        Some("proxy.com".to_string()),
-    );
+    let proxy = create_test_proxy(UpstreamStyle::PathStyle, Some("proxy.com".to_string()));
     // Host doesn't match proxy domain, should fall back to path-style
-    let parsed = proxy
-        .parse_incoming_request("other.com", "/bucket/key.txt")
-        .unwrap();
+    let parsed = proxy.parse_incoming_request("other.com", "/bucket/key.txt").unwrap();
     assert_eq!(parsed.bucket, "bucket");
     assert_eq!(parsed.key, "key.txt");
 }
@@ -189,10 +171,7 @@ fn test_parse_endpoint_with_tls() {
             },
         }))
         .participant_context_resolver(Arc::new(StaticParticipantContextResolver {
-            participant_context: ParticipantContext::builder()
-                .id("test")
-                .audience("test")
-                .build(),
+            participant_context: ParticipantContext::builder().id("test").audience("test").build(),
         }))
         .auth_evaluator(Arc::new(TrueAuthorizationEvaluator::new()))
         .build();
@@ -323,10 +302,7 @@ fn create_test_proxy(upstream_style: UpstreamStyle, proxy_domain: Option<String>
             },
         }))
         .participant_context_resolver(Arc::new(StaticParticipantContextResolver {
-            participant_context: ParticipantContext::builder()
-                .id("test")
-                .audience("test")
-                .build(),
+            participant_context: ParticipantContext::builder().id("test").audience("test").build(),
         }))
         .auth_evaluator(Arc::new(TrueAuthorizationEvaluator::new()))
         .build()
@@ -353,7 +329,10 @@ fn test_context_caching() {
     ctx.parsed_request = Some(parsed.clone());
 
     // Verify cached data
-    assert!(ctx.parsed_request.is_some(), "After caching, parsed_request should be Some");
+    assert!(
+        ctx.parsed_request.is_some(),
+        "After caching, parsed_request should be Some"
+    );
     assert_eq!(ctx.parsed_request.as_ref().unwrap().bucket, "test-bucket");
     assert_eq!(ctx.parsed_request.as_ref().unwrap().key, "test-key.txt");
 
@@ -362,4 +341,3 @@ fn test_context_caching() {
     assert_eq!(retrieved.bucket, "test-bucket");
     assert_eq!(retrieved.key, "test-key.txt");
 }
-

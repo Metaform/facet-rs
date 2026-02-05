@@ -52,11 +52,7 @@ impl BackoffConfig {
 ///
 /// # Returns
 /// The calculated duration with exponential backoff applied
-pub fn calculate_backoff_interval(
-    base_duration: Duration,
-    failure_count: u32,
-    config: &BackoffConfig,
-) -> Duration {
+pub fn calculate_backoff_interval(base_duration: Duration, failure_count: u32, config: &BackoffConfig) -> Duration {
     // Apply exponential backoff if there have been failures
     let backoff_exponent = failure_count.min(config.max_exponent);
     let backoff_multiplier = config.multiplier.pow(backoff_exponent);
@@ -91,18 +87,9 @@ mod tests {
         let base = Duration::from_secs(10);
         let config = BackoffConfig::default();
 
-        assert_eq!(
-            calculate_backoff_interval(base, 1, &config),
-            Duration::from_secs(20)
-        ); // 10 * 2^1
-        assert_eq!(
-            calculate_backoff_interval(base, 2, &config),
-            Duration::from_secs(40)
-        ); // 10 * 2^2
-        assert_eq!(
-            calculate_backoff_interval(base, 3, &config),
-            Duration::from_secs(80)
-        ); // 10 * 2^3
+        assert_eq!(calculate_backoff_interval(base, 1, &config), Duration::from_secs(20)); // 10 * 2^1
+        assert_eq!(calculate_backoff_interval(base, 2, &config), Duration::from_secs(40)); // 10 * 2^2
+        assert_eq!(calculate_backoff_interval(base, 3, &config), Duration::from_secs(80)); // 10 * 2^3
     }
 
     #[test]
@@ -122,14 +109,8 @@ mod tests {
         let base = Duration::from_secs(10);
         let config = BackoffConfig::new(3, 5); // 3x multiplier
 
-        assert_eq!(
-            calculate_backoff_interval(base, 1, &config),
-            Duration::from_secs(30)
-        ); // 10 * 3^1
-        assert_eq!(
-            calculate_backoff_interval(base, 2, &config),
-            Duration::from_secs(90)
-        ); // 10 * 3^2
+        assert_eq!(calculate_backoff_interval(base, 1, &config), Duration::from_secs(30)); // 10 * 3^1
+        assert_eq!(calculate_backoff_interval(base, 2, &config), Duration::from_secs(90)); // 10 * 3^2
     }
 
     #[test]

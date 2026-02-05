@@ -84,7 +84,9 @@ pub(crate) async fn get_vault_access_token(
         .map_err(|e| VaultError::InvalidData(format!("Failed to parse token response: {}", e)))?;
 
     if token_response.access_token.is_empty() {
-        return Err(VaultError::AuthenticationError("Access token not found in response".to_string()));
+        return Err(VaultError::AuthenticationError(
+            "Access token not found in response".to_string(),
+        ));
     }
 
     Ok(token_response.access_token)

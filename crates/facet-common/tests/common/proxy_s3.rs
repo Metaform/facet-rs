@@ -20,8 +20,7 @@ use facet_common::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, R
 use facet_common::context::{ParticipantContext, ParticipantContextResolver, StaticParticipantContextResolver};
 use facet_common::jwt::JwtVerifier;
 use facet_common::proxy::s3::{
-    DefaultS3OperationParser, S3CredentialResolver, S3Credentials, S3OperationParser,
-    S3Proxy, UpstreamStyle,
+    DefaultS3OperationParser, S3CredentialResolver, S3Credentials, S3OperationParser, S3Proxy, UpstreamStyle,
 };
 use pingora::server::Server;
 use pingora::server::configuration::Opt;
@@ -118,10 +117,7 @@ impl ProxyConfig {
         });
 
         let participant_context_resolver = Arc::new(StaticParticipantContextResolver {
-            participant_context: ParticipantContext::builder()
-                .id("proxy")
-                .audience("s3-proxy")
-                .build(),
+            participant_context: ParticipantContext::builder().id("proxy").audience("s3-proxy").build(),
         });
 
         let token_verifier = Arc::new(TokenMatchingJwtVerifier {
@@ -221,17 +217,18 @@ pub async fn launch_s3proxy(config: ProxyConfig) {
     });
 
     // Wait for proxy to be ready with 5-second timeout
-    let wait_result = tokio::time::timeout(
-        tokio::time::Duration::from_secs(5),
-        async {
-            loop {
-                if tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.is_ok() {
-                    break;
-                }
-                tokio::task::yield_now().await;
+    let wait_result = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+        loop {
+            if tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+                .await
+                .is_ok()
+            {
+                break;
             }
+            tokio::task::yield_now().await;
         }
-    ).await;
+    })
+    .await;
 
     if wait_result.is_err() {
         panic!("Proxy failed to start within 5 seconds on port {}", port);

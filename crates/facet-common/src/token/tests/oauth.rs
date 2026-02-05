@@ -10,12 +10,12 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::token::oauth::OAuth2TokenClient;
-use crate::token::TokenClient;
 use crate::context::ParticipantContext;
-use crate::jwt::jwtutils::generate_ed25519_keypair_pem;
-use crate::jwt::jwtutils::StaticSigningKeyResolver;
 use crate::jwt::LocalJwtGenerator;
+use crate::jwt::jwtutils::StaticSigningKeyResolver;
+use crate::jwt::jwtutils::generate_ed25519_keypair_pem;
+use crate::token::TokenClient;
+use crate::token::oauth::OAuth2TokenClient;
 use std::sync::Arc;
 use wiremock::matchers::{body_string_contains, header_regex, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -66,7 +66,13 @@ async fn test_refresh_token_success() {
 
     let refresh_endpoint = format!("{}/token/refresh", mock_server.uri());
     let token_data = client
-        .refresh_token(pc, "test-identifier", "old_access_token", "old_refresh_token", &refresh_endpoint)
+        .refresh_token(
+            pc,
+            "test-identifier",
+            "old_access_token",
+            "old_refresh_token",
+            &refresh_endpoint,
+        )
         .await
         .expect("Token refresh should succeed");
 

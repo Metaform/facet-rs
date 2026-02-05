@@ -10,9 +10,9 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use crate::context::ParticipantContext;
 use crate::lock::{LockGuard, LockManager, UnlockOps};
 use crate::token::{TokenClient, TokenData, TokenError, TokenStore};
-use crate::context::ParticipantContext;
 use mockall::mock;
 use mockall::predicate::*;
 use std::sync::Arc;

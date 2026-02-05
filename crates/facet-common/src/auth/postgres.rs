@@ -217,5 +217,4 @@ impl AuthorizationEvaluator for PostgresAuthorizationEvaluator {
 
         Ok(false)
     }
-
 }

@@ -10,11 +10,11 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use crate::context::ParticipantContext;
 use crate::token::{TokenData, TokenError, TokenStore};
+use crate::util::clock::{Clock, default_clock};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crate::context::ParticipantContext;
-use crate::util::clock::{Clock, default_clock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

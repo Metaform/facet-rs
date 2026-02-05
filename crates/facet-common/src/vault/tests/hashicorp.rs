@@ -10,18 +10,18 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use std::sync::Arc;
-use std::time::Duration;
 use crate::util::clock::{Clock, MockClock};
-use chrono::{TimeDelta, Utc};
+use crate::vault::VaultError;
 use crate::vault::hashicorp::auth::VaultAuthClient;
 use crate::vault::hashicorp::config::ErrorCallback;
 use crate::vault::hashicorp::renewal::TokenRenewer;
 use crate::vault::hashicorp::state::VaultClientState;
-use crate::vault::VaultError;
-use tokio::sync::RwLock;
-use reqwest::Client;
 use async_trait::async_trait;
+use chrono::{TimeDelta, Utc};
+use reqwest::Client;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
 
 // Mock auth provider for testing
 struct MockAuthProvider;
@@ -222,7 +222,10 @@ impl VaultAuthClient for MockAuthProvider {
     }
 }
 
-fn create_test_renewer(state: Arc<RwLock<VaultClientState>>, on_renewal_error: Option<ErrorCallback>) -> Arc<TokenRenewer> {
+fn create_test_renewer(
+    state: Arc<RwLock<VaultClientState>>,
+    on_renewal_error: Option<ErrorCallback>,
+) -> Arc<TokenRenewer> {
     let auth_client = Arc::new(MockAuthProvider);
     let http_client = Client::new();
     let clock = Arc::new(MockClock::new(Utc::now()));

@@ -10,19 +10,21 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use super::auth::VaultAuthClient;
+use super::config::{
+    DEFAULT_MAX_CONSECUTIVE_FAILURES, DEFAULT_RENEWAL_JITTER, DEFAULT_TOKEN_RENEWAL_PERCENTAGE, ErrorCallback,
+};
+use super::state::VaultClientState;
 use crate::util::backoff::{BackoffConfig, calculate_backoff_interval};
 use crate::util::clock::Clock;
 use crate::vault::VaultError;
-use super::auth::VaultAuthClient;
-use super::config::{ErrorCallback, DEFAULT_TOKEN_RENEWAL_PERCENTAGE, DEFAULT_MAX_CONSECUTIVE_FAILURES, DEFAULT_RENEWAL_JITTER};
-use super::state::VaultClientState;
 use bon::Builder;
 use log::{debug, error};
 use rand::Rng;
 use reqwest::Client;
+use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
-use serde::Serialize;
 use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 
@@ -83,7 +85,6 @@ pub struct TokenRenewer {
 }
 
 impl TokenRenewer {
-
     /// Starts the renewal loop in a background task.
     pub(crate) fn start(self: Arc<Self>) -> RenewalHandle {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -110,7 +111,12 @@ impl TokenRenewer {
             }
 
             // Calculate renewal interval with exponential backoff and jitter
-            let renewal_interval = Self::calculate_renewal_interval(lease_duration, consecutive_failures, self.token_renewal_percentage, self.renewal_jitter);
+            let renewal_interval = Self::calculate_renewal_interval(
+                lease_duration,
+                consecutive_failures,
+                self.token_renewal_percentage,
+                self.renewal_jitter,
+            );
 
             // Wait for either the renewal interval or shutdown signal
             tokio::select! {
@@ -225,12 +231,18 @@ impl TokenRenewer {
 
     /// Calculates the renewal interval with exponential backoff and jitter based on consecutive failures.
     #[doc(hidden)]
-    pub fn calculate_renewal_interval(lease_duration: u64, consecutive_failures: u32, renewal_percentage: f64, jitter: f64) -> Duration {
+    pub fn calculate_renewal_interval(
+        lease_duration: u64,
+        consecutive_failures: u32,
+        renewal_percentage: f64,
+        jitter: f64,
+    ) -> Duration {
         // Calculate base renewal interval (e.g., 80% of lease duration)
         let base_renewal_interval = Duration::from_secs((lease_duration as f64 * renewal_percentage) as u64);
 
         // Apply exponential backoff using the default configuration (2x multiplier, max 5 exponent)
-        let interval_with_backoff = calculate_backoff_interval(base_renewal_interval, consecutive_failures, &BackoffConfig::default());
+        let interval_with_backoff =
+            calculate_backoff_interval(base_renewal_interval, consecutive_failures, &BackoffConfig::default());
 
         // Apply jitter to prevent thundering herd (e.g., ±10% randomization)
         if jitter > 0.0 {
@@ -248,4 +260,3 @@ impl TokenRenewer {
 struct TokenRenewRequest {
     pub(crate) increment: String,
 }
-

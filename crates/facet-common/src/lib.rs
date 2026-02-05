@@ -10,14 +10,14 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-pub mod context;
-pub mod util;
-pub mod jwt;
-pub mod proxy;
 pub mod auth;
-pub mod vault;
+pub mod context;
+pub mod jwt;
 pub mod lock;
+pub mod proxy;
 pub mod token;
+pub mod util;
+pub mod vault;
 
 #[cfg(test)]
 pub mod test_fixtures {

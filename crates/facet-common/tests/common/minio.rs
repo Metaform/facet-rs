@@ -102,11 +102,7 @@ impl MinioInstance {
         let config = build_minio_client_config(&self.endpoint).await;
         let client = Client::new(&config);
 
-        let create_result = client
-            .create_bucket()
-            .bucket(bucket)
-            .send()
-            .await;
+        let create_result = client.create_bucket().bucket(bucket).send().await;
 
         // Ignore bucket-already-exists errors (MinIO may persist state between test runs)
         if let Err(e) = create_result {

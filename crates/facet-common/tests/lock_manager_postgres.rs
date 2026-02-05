@@ -14,10 +14,10 @@ mod common;
 
 use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
-use facet_common::util::clock::{Clock, MockClock};
-use facet_common::lock::postgres::PostgresLockManager;
 use facet_common::lock::LockError::{LockAlreadyHeld, LockNotFound};
+use facet_common::lock::postgres::PostgresLockManager;
 use facet_common::lock::{LockManager, UnlockOps};
+use facet_common::util::clock::{Clock, MockClock};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -1023,5 +1023,3 @@ async fn test_postgres_lock_count_multiple_resources_different_owners() {
         .expect("Failed to get lock count");
     assert_eq!(count, 1);
 }
-
-

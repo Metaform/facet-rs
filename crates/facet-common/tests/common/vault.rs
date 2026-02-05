@@ -34,10 +34,7 @@ pub async fn setup_vault_container_with_ttl(
 ) -> (String, String, testcontainers::ContainerAsync<HashicorpVault>) {
     use testcontainers::ImageExt;
 
-    let container = HashicorpVault::default()
-        .with_network(network)
-        .start()
-        .await.unwrap();
+    let container = HashicorpVault::default().with_network(network).start().await.unwrap();
 
     let host_port = container.get_host_port_ipv4(8200).await.unwrap();
     let vault_url = format!("http://127.0.0.1:{}", host_port);

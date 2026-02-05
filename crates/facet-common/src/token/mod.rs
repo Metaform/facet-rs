@@ -22,13 +22,13 @@ pub use postgres::PostgresTokenStore;
 
 const FIVE_SECONDS_MILLIS: i64 = 5_000;
 
+use crate::context::ParticipantContext;
+use crate::jwt::JwtGenerationError;
 use crate::lock::LockManager;
+use crate::util::clock::{Clock, default_clock};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::{DateTime, TimeDelta, Utc};
-use crate::context::ParticipantContext;
-use crate::jwt::JwtGenerationError;
-use crate::util::clock::{Clock, default_clock};
 use std::sync::Arc;
 use thiserror::Error;
 

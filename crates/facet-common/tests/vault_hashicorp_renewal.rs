@@ -23,9 +23,9 @@ use facet_common::vault::hashicorp::renewal::TokenRenewer;
 use facet_common::vault::hashicorp::state::VaultClientState;
 use facet_common::vault::hashicorp::{ErrorCallback, HashicorpVaultConfig};
 use reqwest::Client;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{watch, RwLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::{RwLock, watch};
 use tokio::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -63,12 +63,7 @@ async fn test_renewal_loop_successful_renewal_cycle() {
     });
 
     // Wait for renewal to happen (last_renewed is set)
-    let renewed = wait_for_condition(
-        &state,
-        |s| s.last_renewed().is_some(),
-        Duration::from_secs(20),
-    )
-    .await;
+    let renewed = wait_for_condition(&state, |s| s.last_renewed().is_some(), Duration::from_secs(20)).await;
 
     assert!(renewed, "Renewal should have occurred");
 
@@ -119,12 +114,7 @@ async fn test_renewal_loop_max_consecutive_failures() {
     });
 
     // Wait for failures to reach 10
-    let max_failures = wait_for_condition(
-        &state,
-        |s| s.consecutive_failures() >= 10,
-        Duration::from_secs(600),
-    )
-    .await;
+    let max_failures = wait_for_condition(&state, |s| s.consecutive_failures() >= 10, Duration::from_secs(600)).await;
 
     assert!(max_failures, "Should reach max consecutive failures");
 
@@ -190,12 +180,7 @@ async fn test_renewal_loop_token_expiration_recovery() {
     });
 
     // Wait for token to be replaced
-    let token_replaced = wait_for_condition(
-        &state,
-        |s| s.token() == "new-vault-token",
-        Duration::from_secs(20),
-    )
-    .await;
+    let token_replaced = wait_for_condition(&state, |s| s.token() == "new-vault-token", Duration::from_secs(20)).await;
 
     assert!(token_replaced, "Token should have been replaced");
 
@@ -292,12 +277,7 @@ async fn test_renewal_loop_error_callback_not_invoked_on_success() {
     });
 
     // Wait for renewal to complete
-    let renewed = wait_for_condition(
-        &state,
-        |s| s.last_renewed().is_some(),
-        Duration::from_secs(20),
-    )
-    .await;
+    let renewed = wait_for_condition(&state, |s| s.last_renewed().is_some(), Duration::from_secs(20)).await;
 
     assert!(renewed, "Renewal should have occurred");
 

@@ -130,7 +130,7 @@ impl RuleStore for MemoryAuthorizationEvaluator {
         let mut rules = self
             .rules
             .write()
-            .map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?; 
+            .map_err(|e| AuthorizationError::StoreError(format!("Failed to acquire lock: {}", e)))?;
         rules.remove(&participant_context.id);
         Ok(())
     }
@@ -169,21 +169,15 @@ impl MemoryAuthorizationEvaluator {
 
     /// Get the number of rules in a specific scope for a participant
     pub(crate) fn rule_count(&self, participant_id: &str, scope: &str) -> Option<usize> {
-        self.rules
-            .read()
-            .ok()
-            .and_then(|rules| {
-                rules
-                    .get(participant_id)
-                    .and_then(|participant_rules| participant_rules.get(scope).map(|r| r.len()))
-            })
+        self.rules.read().ok().and_then(|rules| {
+            rules
+                .get(participant_id)
+                .and_then(|participant_rules| participant_rules.get(scope).map(|r| r.len()))
+        })
     }
 
     /// Get the total number of participants in the map
     pub(crate) fn participant_count(&self) -> usize {
-        self.rules
-            .read()
-            .map(|rules| rules.len())
-            .unwrap_or(0)
+        self.rules.read().map(|rules| rules.len()).unwrap_or(0)
     }
 }

@@ -12,9 +12,7 @@
 
 use crate::context::ParticipantContext;
 use crate::jwt::jwtutils::{generate_ed25519_keypair_der, generate_ed25519_keypair_pem, generate_rsa_keypair_pem};
-use crate::jwt::{
-    JwtGenerator, JwtVerificationError, JwtVerifier, TokenClaims,
-};
+use crate::jwt::{JwtGenerator, JwtVerificationError, JwtVerifier, TokenClaims};
 use crate::jwt::{KeyFormat, LocalJwtGenerator, LocalJwtVerifier, SigningAlgorithm};
 use crate::test_fixtures::{StaticSigningKeyResolver, StaticVerificationKeyResolver};
 use chrono::Utc;
@@ -127,11 +125,7 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        key_format,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, key_format, SigningAlgorithm::EdDSA);
 
     let verified_claims = verifier
         .verify_token(pc, token.as_str())
@@ -176,11 +170,7 @@ fn test_expired_token_validation_pem_eddsa() {
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -218,12 +208,7 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should accept token expired 20 seconds ago
-    let verifier = create_test_verifier_with_leeway(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-        30,
-    );
+    let verifier = create_test_verifier_with_leeway(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA, 30);
 
     let verified_claims = verifier
         .verify_token(pc, token.as_str())
@@ -264,12 +249,7 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should reject token expired 100 seconds ago
-    let verifier = create_test_verifier_with_leeway(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-        30,
-    );
+    let verifier = create_test_verifier_with_leeway(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA, 30);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -309,11 +289,7 @@ fn test_invalid_signature_pem_eddsa() {
         .expect("Token generation should succeed");
 
     // Try to verify with a different public key
-    let verifier = create_test_verifier(
-        keypair2.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair2.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -325,11 +301,7 @@ fn test_invalid_signature_pem_eddsa() {
 fn test_malformed_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     let pc = &ParticipantContext::builder()
         .id("participant1")
@@ -391,11 +363,7 @@ fn test_mismatched_key_format_pem_eddsa() {
 
     let keypair_der = generate_ed25519_keypair_der().expect("Failed to generate DER keypair");
 
-    let verifier = create_test_verifier(
-        keypair_der.public_key,
-        KeyFormat::DER,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair_der.public_key, KeyFormat::DER, SigningAlgorithm::EdDSA);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -437,11 +405,7 @@ fn test_rsa_token_generation_validation_pem() {
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::RS256,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::RS256);
 
     let verified_claims = verifier
         .verify_token(pc, token.as_str())
@@ -486,11 +450,7 @@ fn test_audience_mismatch_pem_eddsa() {
         .generate_token(pc_generate, claims)
         .expect("Token generation should succeed");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     // Try to verify with a different audience
     let pc_verify = &ParticipantContext::builder()
@@ -501,7 +461,10 @@ fn test_audience_mismatch_pem_eddsa() {
     let result = verifier.verify_token(pc_verify, token.as_str());
 
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), JwtVerificationError::VerificationFailed(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        JwtVerificationError::VerificationFailed(_)
+    ));
 }
 
 #[test]
@@ -537,11 +500,7 @@ fn test_algorithm_mismatch_pem() {
         .expect("Token generation should succeed");
 
     // Try to verify EdDSA token with RS256 verifier
-    let verifier = create_test_verifier(
-        keypair_rsa.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::RS256,
-    );
+    let verifier = create_test_verifier(keypair_rsa.public_key, KeyFormat::PEM, SigningAlgorithm::RS256);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -580,11 +539,7 @@ fn test_not_before_validation_pem_eddsa() {
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -624,12 +579,7 @@ fn test_not_before_with_leeway_pem_eddsa() {
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should accept token with nbf 20 seconds in the future
-    let verifier = create_test_verifier_with_leeway(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-        30,
-    );
+    let verifier = create_test_verifier_with_leeway(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA, 30);
 
     let verified_claims = verifier
         .verify_token(pc, token.as_str())
@@ -671,12 +621,7 @@ fn test_not_before_beyond_leeway_pem_eddsa() {
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should reject token with nbf 100 seconds in the future
-    let verifier = create_test_verifier_with_leeway(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-        30,
-    );
+    let verifier = create_test_verifier_with_leeway(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA, 30);
 
     let result = verifier.verify_token(pc, token.as_str());
 
@@ -721,18 +666,17 @@ fn test_generator_sets_iat_automatically_pem_eddsa() {
 
     let after_generation = Utc::now().timestamp();
 
-    let verifier = create_test_verifier(
-        keypair.public_key,
-        KeyFormat::PEM,
-        SigningAlgorithm::EdDSA,
-    );
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
 
     let verified_claims = verifier
         .verify_token(pc, token.as_str())
         .expect("Token verification should succeed");
 
     // Verify that the iat claim was set to current time, NOT the old value we passed in
-    assert_ne!(verified_claims.iat, old_iat, "Generator should ignore the iat value passed in TokenClaims");
+    assert_ne!(
+        verified_claims.iat, old_iat,
+        "Generator should ignore the iat value passed in TokenClaims"
+    );
     assert!(
         verified_claims.iat >= before_generation && verified_claims.iat <= after_generation,
         "Generator should set iat to current timestamp. Expected between {} and {}, got {}",
@@ -741,7 +685,6 @@ fn test_generator_sets_iat_automatically_pem_eddsa() {
         verified_claims.iat
     );
 }
-
 
 #[test]
 fn test_kid_and_iss_are_set_correctly_in_generated_token() {
@@ -767,17 +710,14 @@ fn test_kid_and_iss_are_set_correctly_in_generated_token() {
         .exp(now + 10000)
         .build();
 
-    let pc = &ParticipantContext::builder()
-        .id("participant1")
-        .build();
+    let pc = &ParticipantContext::builder().id("participant1").build();
 
     let token = generator
         .generate_token(pc, claims)
         .expect("Token generation should succeed");
 
     // Verify kid in header
-    let header = jsonwebtoken::decode_header(token.as_str())
-        .expect("Should be able to decode header");
+    let header = jsonwebtoken::decode_header(token.as_str()).expect("Should be able to decode header");
     assert_eq!(header.kid, Some(expected_kid.to_string()), "kid header should match");
 
     // Verify iss in claims

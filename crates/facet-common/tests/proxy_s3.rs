@@ -13,15 +13,12 @@
 mod common;
 
 use common::{
-    create_test_client, get_available_port, launch_s3proxy, setup_postgres_container,
-    MinioInstance, PassthroughCredentialsResolver, ProxyConfig, TestJwtVerifier,
-    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, TEST_BUCKET,
+    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, PassthroughCredentialsResolver, ProxyConfig, TEST_BUCKET,
+    TestJwtVerifier, create_test_client, get_available_port, launch_s3proxy, setup_postgres_container,
 };
 use facet_common::auth::{AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore};
 use facet_common::context::{ParticipantContext, StaticParticipantContextResolver};
-use facet_common::proxy::s3::{
-    DefaultS3OperationParser, S3Credentials, UpstreamStyle,
-};
+use facet_common::proxy::s3::{DefaultS3OperationParser, S3Credentials, UpstreamStyle};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -33,8 +30,12 @@ async fn test_s3_proxy_end_to_end_with_postgres() {
 
     // Launch MinIO container as upstream S3 server
     let minio = MinioInstance::launch().await;
-    minio.setup_bucket_with_file(TEST_BUCKET, "test-file.txt", b"Hello from MinIO!").await;
-    minio.setup_bucket_with_file(TEST_BUCKET, "data/document.pdf", b"PDF content here").await;
+    minio
+        .setup_bucket_with_file(TEST_BUCKET, "test-file.txt", b"Hello from MinIO!")
+        .await;
+    minio
+        .setup_bucket_with_file(TEST_BUCKET, "data/document.pdf", b"PDF content here")
+        .await;
 
     let participant_id = "user123";
     let scope = "agreement-456";
@@ -104,7 +105,11 @@ async fn test_s3_proxy_end_to_end_with_postgres() {
         .send()
         .await;
 
-    assert!(get_response.is_ok(), "GetObject should succeed with valid authorization. Error: {:?}", get_response.as_ref().err());
+    assert!(
+        get_response.is_ok(),
+        "GetObject should succeed with valid authorization. Error: {:?}",
+        get_response.as_ref().err()
+    );
     let body = get_response.unwrap().body.collect().await.unwrap();
     assert_eq!(body.to_vec(), b"Hello from MinIO!");
 
@@ -125,14 +130,22 @@ async fn test_s3_proxy_end_to_end_with_postgres() {
         .put_object()
         .bucket(TEST_BUCKET)
         .key("uploads/new-file.txt")
-        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"New content uploaded through proxy"))
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(
+            b"New content uploaded through proxy",
+        ))
         .send()
         .await;
 
     assert!(put_response.is_ok(), "PutObject should succeed in uploads/ path");
 
     assert!(
-        minio.verify_object_content(TEST_BUCKET, "uploads/new-file.txt", b"New content uploaded through proxy").await,
+        minio
+            .verify_object_content(
+                TEST_BUCKET,
+                "uploads/new-file.txt",
+                b"New content uploaded through proxy"
+            )
+            .await,
         "Uploaded file should exist in MinIO with correct content"
     );
 
@@ -166,7 +179,10 @@ async fn test_s3_proxy_end_to_end_with_postgres() {
     )
     .await
     .unwrap();
-    assert!(authorized_put, "PutObject operation should be authorized for uploads/ path");
+    assert!(
+        authorized_put,
+        "PutObject operation should be authorized for uploads/ path"
+    );
 
     // Test 6: Verify unauthorized operation would be denied
     let delete_operation = Operation::builder()

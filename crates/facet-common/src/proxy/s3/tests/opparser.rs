@@ -10,8 +10,8 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::proxy::s3::opparser::DefaultS3OperationParser;
 use crate::proxy::s3::S3OperationParser;
+use crate::proxy::s3::opparser::DefaultS3OperationParser;
 use pingora_http::RequestHeader;
 
 // ==================== Object GET Operations ====================
@@ -408,9 +408,7 @@ fn test_multipart_upload_related() {
 fn test_custom_scope() {
     let parser = DefaultS3OperationParser::new();
     let req = create_request("GET", "/bucket/key");
-    let op = parser
-        .parse_operation("custom-scope:read", &req)
-        .unwrap();
+    let op = parser.parse_operation("custom-scope:read", &req).unwrap();
 
     assert_eq!(op.scope, "custom-scope:read");
     assert_eq!(op.action, "s3:GetObject");
@@ -539,8 +537,6 @@ fn test_bucket_operation_detection_with_object_query() {
 /// Helper function to create a RequestHeader for testing
 fn create_request(method: &str, uri: &str) -> RequestHeader {
     let mut req = RequestHeader::build(method, uri.as_bytes(), None).unwrap();
-    req.insert_header("Host", "test-bucket.s3.amazonaws.com")
-        .unwrap();
+    req.insert_header("Host", "test-bucket.s3.amazonaws.com").unwrap();
     req
 }
-

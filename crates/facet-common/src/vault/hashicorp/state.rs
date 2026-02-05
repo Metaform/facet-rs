@@ -28,7 +28,7 @@ pub struct VaultClientState {
     /// The lease duration in seconds
     pub(super) lease_duration: u64,
     /// The last error encountered during token renewal, if any
-    pub(super) last_error : Option<String>,
+    pub(super) last_error: Option<String>,
     /// Number of consecutive renewal failures
     #[builder(default)]
     pub(super) consecutive_failures: u32,
@@ -53,10 +53,7 @@ impl VaultClientState {
         assert!(self.lease_duration > 0, "lease_duration must be greater than 0");
         assert!(self.health_threshold > 0, "health_threshold must be greater than 0");
         if let Some(renewed) = self.last_renewed {
-            assert!(
-                renewed >= self.last_created,
-                "last_renewed must be >= last_created"
-            );
+            assert!(renewed >= self.last_created, "last_renewed must be >= last_created");
         }
     }
 

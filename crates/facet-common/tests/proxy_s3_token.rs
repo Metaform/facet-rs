@@ -12,14 +12,14 @@
 
 mod common;
 
-use aws_config::BehaviorVersion;
-use aws_sdk_s3::config::{Credentials, Region};
-use aws_sdk_s3::Client;
-use facet_common::proxy::s3::UpstreamStyle;
 use crate::common::{
-    get_available_port, launch_s3proxy, MinioInstance, ProxyConfig,
-    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, TEST_BUCKET, TEST_KEY,
+    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, ProxyConfig, TEST_BUCKET, TEST_KEY, get_available_port,
+    launch_s3proxy,
 };
+use aws_config::BehaviorVersion;
+use aws_sdk_s3::Client;
+use aws_sdk_s3::config::{Credentials, Region};
+use facet_common::proxy::s3::UpstreamStyle;
 
 const TEST_CONTENT: &str = "Hello from Pingora proxy test!";
 const VALID_SESSION_TOKEN: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
@@ -29,7 +29,9 @@ const INVALID_SESSION_TOKEN: &str = "invalid-token";
 async fn test_s3_proxy_with_token_validation() {
     // Start MinIO container
     let minio = MinioInstance::launch().await;
-    minio.setup_bucket_with_file(TEST_BUCKET, TEST_KEY, TEST_CONTENT.as_bytes()).await;
+    minio
+        .setup_bucket_with_file(TEST_BUCKET, TEST_KEY, TEST_CONTENT.as_bytes())
+        .await;
 
     // Get an available port for the proxy
     let proxy_port = get_available_port();
@@ -40,7 +42,8 @@ async fn test_s3_proxy_with_token_validation() {
         None,
         VALID_SESSION_TOKEN.to_string(),
         "test-scope".to_string(),
-    ).await;
+    )
+    .await;
     launch_s3proxy(config).await;
 
     // Configure SDK to use the proxy as a reverse proxy endpoint

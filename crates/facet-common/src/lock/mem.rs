@@ -11,9 +11,9 @@
 //
 
 use crate::lock::{LockError, LockGuard, LockManager, UnlockOps};
+use crate::util::clock::{Clock, default_clock};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeDelta, Utc};
-use crate::util::clock::{default_clock, Clock};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 

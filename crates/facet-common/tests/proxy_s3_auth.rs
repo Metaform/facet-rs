@@ -12,17 +12,16 @@
 
 mod common;
 
+use crate::common::{
+    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, ProxyConfig, TEST_BUCKET, add_auth_rule, create_test_client,
+    get_available_port, launch_s3proxy,
+};
 use aws_config::BehaviorVersion;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::Client;
 use facet_common::auth::MemoryAuthorizationEvaluator;
 use std::sync::Arc;
-use crate::common::{
-    create_test_client, get_available_port, add_auth_rule, MinioInstance,
-    ProxyConfig, launch_s3proxy, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, TEST_BUCKET,
-};
-
 
 // ==================== Object GET Operations - Allow ====================
 
@@ -32,10 +31,24 @@ async fn test_e2e_allow_get_object() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/test-file.txt$", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/test-file.txt$", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -55,7 +68,10 @@ async fn test_e2e_allow_get_object() {
     assert_eq!(content, "test content", "Content should match MinIO data");
 
     // Verify: File exists in MinIO
-    assert!(minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await, "File should exist in MinIO");
+    assert!(
+        minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await,
+        "File should exist in MinIO"
+    );
 }
 
 #[tokio::test]
@@ -64,10 +80,24 @@ async fn test_e2e_allow_get_object_with_wildcard() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -93,10 +123,24 @@ async fn test_e2e_allow_head_object() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -111,7 +155,10 @@ async fn test_e2e_allow_head_object() {
     assert!(result.is_ok(), "HEAD should use same permission as GET");
 
     // Verify: Object exists in MinIO
-    assert!(minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await, "Object should exist in MinIO");
+    assert!(
+        minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await,
+        "Object should exist in MinIO"
+    );
 }
 
 // ==================== Object PUT Operations - Allow ====================
@@ -122,10 +169,24 @@ async fn test_e2e_allow_put_object() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:PutObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:PutObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -141,7 +202,12 @@ async fn test_e2e_allow_put_object() {
     assert!(result.is_ok(), "Should allow PutObject with correct permissions");
 
     // Verify: Object was created in MinIO with correct content
-    assert!(minio.verify_object_content(TEST_BUCKET, "new-file.txt", b"new content").await, "Object should exist with correct content");
+    assert!(
+        minio
+            .verify_object_content(TEST_BUCKET, "new-file.txt", b"new content")
+            .await,
+        "Object should exist with correct content"
+    );
 }
 
 // ==================== Object DELETE Operations - Allow ====================
@@ -152,10 +218,24 @@ async fn test_e2e_allow_delete_object() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:DeleteObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:DeleteObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -170,7 +250,10 @@ async fn test_e2e_allow_delete_object() {
     assert!(result.is_ok(), "Should allow DeleteObject with correct permissions");
 
     // Verify: Object was deleted from MinIO
-    assert!(minio.verify_object_deleted(TEST_BUCKET, "test-file.txt").await, "Object should not exist after deletion");
+    assert!(
+        minio.verify_object_deleted(TEST_BUCKET, "test-file.txt").await,
+        "Object should not exist after deletion"
+    );
 }
 
 // ==================== Bucket Operations - Allow ====================
@@ -181,10 +264,24 @@ async fn test_e2e_allow_list_bucket() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:ListBucket"], &format!("^/{}/?$", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:ListBucket"],
+        &format!("^/{}/?$", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -204,10 +301,24 @@ async fn test_e2e_deny_wrong_action() {
 
     // Only allow GetObject
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -223,7 +334,10 @@ async fn test_e2e_deny_wrong_action() {
     assert!(result.is_err(), "Should deny PutObject without permission");
 
     // Verify: Object was NOT created in MinIO
-    assert!(minio.verify_object_deleted(TEST_BUCKET, "unauthorized.txt").await, "Unauthorized object should not exist");
+    assert!(
+        minio.verify_object_deleted(TEST_BUCKET, "unauthorized.txt").await,
+        "Unauthorized object should not exist"
+    );
 }
 
 #[tokio::test]
@@ -233,10 +347,24 @@ async fn test_e2e_deny_wrong_resource_pattern() {
 
     // Only allow access to /public/* path
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/public/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/public/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -251,7 +379,10 @@ async fn test_e2e_deny_wrong_resource_pattern() {
     assert!(result.is_err(), "Should deny access to files outside allowed pattern");
 
     // Verify: Original file still exists in MinIO (access was denied, not deleted)
-    assert!(minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await, "Original file should still exist");
+    assert!(
+        minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await,
+        "Original file should still exist"
+    );
 }
 
 #[tokio::test]
@@ -261,10 +392,24 @@ async fn test_e2e_deny_read_only_user_trying_to_write() {
 
     // Read-only permissions
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "readonly_user", TEST_BUCKET, vec!["s3:GetObject", "s3:ListBucket"], &format!("^/{}.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "readonly_user",
+        TEST_BUCKET,
+        vec!["s3:GetObject", "s3:ListBucket"],
+        &format!("^/{}.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "readonly_user", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "readonly_user",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -279,7 +424,10 @@ async fn test_e2e_deny_read_only_user_trying_to_write() {
     assert!(result.is_err(), "Read-only user should not be able to delete");
 
     // Verify: File still exists in MinIO
-    assert!(minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await, "File should still exist after failed delete");
+    assert!(
+        minio.verify_object_exists(TEST_BUCKET, "test-file.txt").await,
+        "File should still exist after failed delete"
+    );
 }
 
 // ==================== Multiple Actions ====================
@@ -290,10 +438,24 @@ async fn test_e2e_multiple_actions_in_single_rule() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user1", TEST_BUCKET, vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user1",
+        TEST_BUCKET,
+        vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user1", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user1",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -326,8 +488,14 @@ async fn test_e2e_multiple_actions_in_single_rule() {
     assert!(result.is_ok(), "Should allow DELETE");
 
     // Verify: All operations succeeded in MinIO
-    assert!(minio.verify_object_exists(TEST_BUCKET, "new-file.txt").await, "PUT file should exist");
-    assert!(minio.verify_object_deleted(TEST_BUCKET, "test-file.txt").await, "Deleted file should not exist");
+    assert!(
+        minio.verify_object_exists(TEST_BUCKET, "new-file.txt").await,
+        "PUT file should exist"
+    );
+    assert!(
+        minio.verify_object_deleted(TEST_BUCKET, "test-file.txt").await,
+        "Deleted file should not exist"
+    );
 }
 
 // ==================== General Scenarios ====================
@@ -338,11 +506,32 @@ async fn test_e2e_readonly_access_to_entire_bucket() {
     minio.setup_default_bucket().await;
 
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "analyst", TEST_BUCKET, vec!["s3:GetObject"], &format!("^/{}/.*", TEST_BUCKET)).await;
-    add_auth_rule(&evaluator, "analyst", TEST_BUCKET, vec!["s3:ListBucket"], &format!("^/{}/?$", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "analyst",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!("^/{}/.*", TEST_BUCKET),
+    )
+    .await;
+    add_auth_rule(
+        &evaluator,
+        "analyst",
+        TEST_BUCKET,
+        vec!["s3:ListBucket"],
+        &format!("^/{}/?$", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "analyst", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "analyst",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -413,10 +602,24 @@ async fn test_e2e_folder_specific_access() {
 
     // User can only access their own folder
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "user123", TEST_BUCKET, vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], &format!("^/{}/users/user123/.*", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "user123",
+        TEST_BUCKET,
+        vec!["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        &format!("^/{}/users/user123/.*", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "user123", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "user123",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
@@ -473,28 +676,32 @@ async fn test_e2e_regex_pattern_with_file_extension() {
 
     // Only allow access to image files
     let evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-    add_auth_rule(&evaluator, "image-processor", TEST_BUCKET, vec!["s3:GetObject"], &format!(r"^/{}/.*\.(jpg|jpeg|png|gif)$", TEST_BUCKET)).await;
+    add_auth_rule(
+        &evaluator,
+        "image-processor",
+        TEST_BUCKET,
+        vec!["s3:GetObject"],
+        &format!(r"^/{}/.*\.(jpg|jpeg|png|gif)$", TEST_BUCKET),
+    )
+    .await;
 
     let proxy_port = get_available_port();
-    launch_s3proxy(ProxyConfig::for_auth_testing(proxy_port, minio.host.clone(), evaluator.clone(), "image-processor", TEST_BUCKET)).await;
+    launch_s3proxy(ProxyConfig::for_auth_testing(
+        proxy_port,
+        minio.host.clone(),
+        evaluator.clone(),
+        "image-processor",
+        TEST_BUCKET,
+    ))
+    .await;
 
     let client = create_test_client(&format!("http://127.0.0.1:{}", proxy_port), None).await;
 
     // Can access image files
-    let result = client
-        .get_object()
-        .bucket(TEST_BUCKET)
-        .key("image.jpg")
-        .send()
-        .await;
+    let result = client.get_object().bucket(TEST_BUCKET).key("image.jpg").send().await;
     assert!(result.is_ok(), "Should allow access to image files");
 
     // Cannot access non-image files
-    let result = client
-        .get_object()
-        .bucket(TEST_BUCKET)
-        .key("document.pdf")
-        .send()
-        .await;
+    let result = client.get_object().bucket(TEST_BUCKET).key("document.pdf").send().await;
     assert!(result.is_err(), "Should deny access to non-image files");
 }

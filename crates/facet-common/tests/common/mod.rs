@@ -14,33 +14,33 @@
 // and each test binary is compiled separately
 #![allow(dead_code)]
 
-mod mocks;
-mod proxy_s3;
-mod minio;
-mod postgres;
-mod vault;
 mod keycloak;
+mod minio;
+mod mocks;
+mod postgres;
+mod proxy_s3;
+mod vault;
 
+use chrono::{TimeDelta, Utc};
+use facet_common::vault::hashicorp::state::VaultClientState;
+#[allow(unused_imports)] // Used in some test files but not others
+pub use keycloak::*;
+#[allow(unused_imports)] // Used in some test files but not others
+pub use minio::*;
+#[allow(unused_imports)] // Mocks are used in some test files but not others
+pub use mocks::*;
+#[allow(unused_imports)] // Used in some test files but not others
+pub use postgres::*;
+#[allow(unused_imports)] // Used in some test files but not others
+pub use proxy_s3::*;
 use std::net::TcpListener;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::time::Duration;
 use testcontainers::bollard::Docker;
 use testcontainers::bollard::models::NetworkCreateRequest;
 use tokio::sync::RwLock;
-use chrono::{TimeDelta, Utc};
-use facet_common::vault::hashicorp::state::VaultClientState;
-#[allow(unused_imports)] // Mocks are used in some test files but not others
-pub use mocks::*;
-#[allow(unused_imports)] // Used in some test files but not others
-pub use proxy_s3::*;
-#[allow(unused_imports)] // Used in some test files but not others
-pub use minio::*;
-#[allow(unused_imports)] // Used in some test files but not others
-pub use postgres::*;
 #[allow(unused_imports)] // Used in some test files but not others
 pub use vault::*;
-#[allow(unused_imports)] // Used in some test files but not others
-pub use keycloak::*;
 
 // ============================================================================
 // VaultClientState Test Fixtures
@@ -145,8 +145,16 @@ pub fn expiring_vault_state() -> VaultClientState {
 
 /// Creates a wrapped VaultClientState ready for use with TokenRenewer.
 /// Returns Arc<RwLock<VaultClientState>> which is the standard pattern.
-pub fn wrapped_test_state(token: &str, lease_duration: u64, consecutive_failures: u32) -> Arc<RwLock<VaultClientState>> {
-    Arc::new(RwLock::new(create_test_state(token, lease_duration, consecutive_failures)))
+pub fn wrapped_test_state(
+    token: &str,
+    lease_duration: u64,
+    consecutive_failures: u32,
+) -> Arc<RwLock<VaultClientState>> {
+    Arc::new(RwLock::new(create_test_state(
+        token,
+        lease_duration,
+        consecutive_failures,
+    )))
 }
 
 /// Creates a Docker network and returns its name.
@@ -166,11 +174,12 @@ pub async fn create_network() -> String {
         // On macOS with Docker Desktop, socket is typically at ~/.docker/run/docker.sock
         let home = std::env::var("HOME").expect("HOME env var not set");
         let socket_path = format!("{}/.docker/run/docker.sock", home);
-        Docker::connect_with_unix(&socket_path, 120, testcontainers::bollard::API_DEFAULT_VERSION)
-            .unwrap_or_else(|_| {
+        Docker::connect_with_unix(&socket_path, 120, testcontainers::bollard::API_DEFAULT_VERSION).unwrap_or_else(
+            |_| {
                 // Fall back to default if custom path doesn't work
                 Docker::connect_with_local_defaults().expect("Failed to connect to Docker")
-            })
+            },
+        )
     } else {
         Docker::connect_with_local_defaults().expect("Failed to connect to Docker")
     };
@@ -214,7 +223,6 @@ async fn cleanup_old_test_networks(docker: &Docker) {
     }
 }
 
-
 /// Get an available port by binding to port 0 and retrieving the assigned port
 pub fn get_available_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to port 0");
@@ -224,11 +232,7 @@ pub fn get_available_port() -> u16 {
 }
 
 /// Poll state until a condition is met or timeout expires
-pub async fn wait_for_condition<F>(
-    state: &Arc<RwLock<VaultClientState>>,
-    condition: F,
-    timeout: Duration,
-) -> bool
+pub async fn wait_for_condition<F>(state: &Arc<RwLock<VaultClientState>>, condition: F, timeout: Duration) -> bool
 where
     F: Fn(&VaultClientState) -> bool,
 {

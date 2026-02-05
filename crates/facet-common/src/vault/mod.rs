@@ -57,10 +57,7 @@ pub enum VaultError {
 
 impl VaultError {
     pub fn is_retriable(&self) -> bool {
-        matches!(
-            self,
-            VaultError::NetworkError(_) | VaultError::AuthenticationError(_)
-        )
+        matches!(self, VaultError::NetworkError(_) | VaultError::AuthenticationError(_))
     }
 }
 
@@ -86,12 +83,18 @@ impl VaultClient for MemoryVaultClient {
         path: &str,
         secret: &str,
     ) -> Result<(), VaultError> {
-        self.secrets.write().unwrap().insert(get_path(participant_context, path), secret.to_string());
+        self.secrets
+            .write()
+            .unwrap()
+            .insert(get_path(participant_context, path), secret.to_string());
         Ok(())
     }
 
     async fn remove_secret(&self, participant_context: &ParticipantContext, path: &str) -> Result<(), VaultError> {
-        self.secrets.write().unwrap().remove(get_path(participant_context, path).as_str());
+        self.secrets
+            .write()
+            .unwrap()
+            .remove(get_path(participant_context, path).as_str());
         Ok(())
     }
 }

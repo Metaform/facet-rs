@@ -101,11 +101,19 @@ impl S3OperationParser for DefaultS3OperationParser {
 
         // Parse URL to extract query parameters
         let url = if uri.starts_with("http://") || uri.starts_with("https://") {
-            Url::parse(&uri)
-                .map_err(|e| internal_error(format!("Failed to parse operation URI '{}' (method={}): {}", uri, method, e)))?
+            Url::parse(&uri).map_err(|e| {
+                internal_error(format!(
+                    "Failed to parse operation URI '{}' (method={}): {}",
+                    uri, method, e
+                ))
+            })?
         } else {
-            Url::parse(&format!("http://dummy{}", uri))
-                .map_err(|e| internal_error(format!("Failed to parse relative URI '{}' (method={}): {}", uri, method, e)))?
+            Url::parse(&format!("http://dummy{}", uri)).map_err(|e| {
+                internal_error(format!(
+                    "Failed to parse relative URI '{}' (method={}): {}",
+                    uri, method, e
+                ))
+            })?
         };
 
         // Collect query parameters

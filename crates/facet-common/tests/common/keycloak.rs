@@ -13,7 +13,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use testcontainers::core::{ContainerPort, ExecCommand, WaitFor};
-use testcontainers::{runners::AsyncRunner, GenericImage, ImageExt};
+use testcontainers::{GenericImage, ImageExt, runners::AsyncRunner};
 
 const KEYCLOAK_IMAGE: &str = "keycloak/keycloak";
 const KEYCLOAK_TAG: &str = "latest";
@@ -89,8 +89,7 @@ async fn cleanup_existing_container(container_name: &str) {
 
     // Try to connect to Docker
     let docker = if let Ok(docker_host) = std::env::var("DOCKER_HOST") {
-        Docker::connect_with_unix(&docker_host, 120, testcontainers::bollard::API_DEFAULT_VERSION)
-            .ok()
+        Docker::connect_with_unix(&docker_host, 120, testcontainers::bollard::API_DEFAULT_VERSION).ok()
     } else if cfg!(target_os = "macos") {
         let home = std::env::var("HOME").expect("HOME env var not set");
         let socket_path = format!("{}/.docker/run/docker.sock", home);
@@ -105,21 +104,20 @@ async fn cleanup_existing_container(container_name: &str) {
         use testcontainers::bollard::query_parameters::RemoveContainerOptions;
 
         // Try to remove the container (best effort - ignore errors)
-        let _ = docker.remove_container(
-            container_name,
-            Some(RemoveContainerOptions {
-                force: true,
-                ..Default::default()
-            })
-        ).await;
+        let _ = docker
+            .remove_container(
+                container_name,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await;
     }
 }
 
 /// Helper to create and configure a Keycloak container on a specific network
-pub async fn setup_keycloak_container(network: &str) -> (
-    KeycloakSetup,
-    testcontainers::ContainerAsync<GenericImage>,
-) {
+pub async fn setup_keycloak_container(network: &str) -> (KeycloakSetup, testcontainers::ContainerAsync<GenericImage>) {
     // Use a fixed hostname for predictable network communication
     let keycloak_hostname = "keycloak";
 
@@ -146,22 +144,20 @@ pub async fn setup_keycloak_container(network: &str) -> (
 
     // Wait for Keycloak to be fully ready
     let client = Client::new();
-    let ready = tokio::time::timeout(
-        tokio::time::Duration::from_secs(30),
-        async {
-            loop {
-                if client
-                    .get(&format!("{}/realms/master", keycloak_url))
-                    .send()
-                    .await
-                    .is_ok()
-                {
-                    break;
-                }
-                tokio::task::yield_now().await;
+    let ready = tokio::time::timeout(tokio::time::Duration::from_secs(30), async {
+        loop {
+            if client
+                .get(&format!("{}/realms/master", keycloak_url))
+                .send()
+                .await
+                .is_ok()
+            {
+                break;
             }
+            tokio::task::yield_now().await;
         }
-    ).await;
+    })
+    .await;
 
     assert!(ready.is_ok(), "Keycloak failed to become ready within 30 seconds");
 
@@ -271,40 +267,35 @@ async fn get_admin_token(client: &Client, admin_token_url: &str) -> String {
     ];
 
     // Retry getting admin token with timeout (SSL configuration may still be propagating)
-    let token_response = tokio::time::timeout(
-        tokio::time::Duration::from_secs(15),
-        async {
-            loop {
-                let response = client
-                    .post(admin_token_url)
-                    .form(&params)
-                    .send()
-                    .await;
+    let token_response = tokio::time::timeout(tokio::time::Duration::from_secs(15), async {
+        loop {
+            let response = client.post(admin_token_url).form(&params).send().await;
 
-                match response {
-                    Ok(resp) if resp.status().is_success() => {
-                        return resp.json::<TokenResponse>().await
-                            .expect("Failed to parse token response");
-                    }
-                    Ok(resp) => {
-                        // Check if it's an SSL error that might resolve after config propagates
-                        if let Ok(text) = resp.text().await {
-                            if text.contains("HTTPS required") {
-                                // SSL config still propagating, yield and retry
-                                tokio::task::yield_now().await;
-                                continue;
-                            }
-                            panic!("Failed to get admin token: {}", text);
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    return resp
+                        .json::<TokenResponse>()
+                        .await
+                        .expect("Failed to parse token response");
+                }
+                Ok(resp) => {
+                    // Check if it's an SSL error that might resolve after config propagates
+                    if let Ok(text) = resp.text().await {
+                        if text.contains("HTTPS required") {
+                            // SSL config still propagating, yield and retry
+                            tokio::task::yield_now().await;
+                            continue;
                         }
+                        panic!("Failed to get admin token: {}", text);
                     }
-                    Err(_) => {
-                        // Network error, yield and retry
-                        tokio::task::yield_now().await;
-                    }
+                }
+                Err(_) => {
+                    // Network error, yield and retry
+                    tokio::task::yield_now().await;
                 }
             }
         }
-    )
+    })
     .await
     .expect("Failed to get admin token within 15 seconds");
 

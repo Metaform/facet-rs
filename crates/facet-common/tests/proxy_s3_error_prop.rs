@@ -21,12 +21,9 @@
 mod common;
 
 use crate::common::{
-    FailingAuthEvaluator, FailingCredentialResolver, FailingOperationParser,
-    DetailedFailureJwtVerifier, PermissiveAuthEvaluator, PassthroughCredentialsResolver,
-    SuspiciousCredentialResolver, TestJwtVerifier, DefaultOperationParser,
-    ProxyConfig, launch_s3proxy,
-    TEST_BUCKET, TEST_KEY,
-    get_available_port,
+    DefaultOperationParser, DetailedFailureJwtVerifier, FailingAuthEvaluator, FailingCredentialResolver,
+    FailingOperationParser, PassthroughCredentialsResolver, PermissiveAuthEvaluator, ProxyConfig,
+    SuspiciousCredentialResolver, TEST_BUCKET, TEST_KEY, TestJwtVerifier, get_available_port, launch_s3proxy,
 };
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
@@ -53,7 +50,8 @@ async fn test_credential_resolver_failure_does_not_leak_details() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    )).await;
+    ))
+    .await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -75,7 +73,11 @@ async fn test_credential_resolver_failure_does_not_leak_details() {
     let err_str = format!("{:?} {}", err, err);
 
     // Assert that sensitive internal details are NOT leaked to client
-    assert!(!err_str.contains("creds-db.internal.example.com"), "Leaked internal hostname: {}", err_str);
+    assert!(
+        !err_str.contains("creds-db.internal.example.com"),
+        "Leaked internal hostname: {}",
+        err_str
+    );
     assert!(!err_str.contains("5432"), "Leaked internal port: {}", err_str);
 }
 
@@ -101,7 +103,8 @@ async fn test_authorization_evaluator_failure_does_not_leak_details() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    )).await;
+    ))
+    .await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -126,7 +129,11 @@ async fn test_authorization_evaluator_failure_does_not_leak_details() {
     let err_str = format!("{:?} {}", err, err);
 
     // Assert that sensitive internal details are NOT leaked to client
-    assert!(!err_str.contains("policy-svc-1.prod.internal"), "Leaked internal hostname: {}", err_str);
+    assert!(
+        !err_str.contains("policy-svc-1.prod.internal"),
+        "Leaked internal hostname: {}",
+        err_str
+    );
     assert!(!err_str.contains("8080"), "Leaked internal port: {}", err_str);
 }
 
@@ -152,7 +159,8 @@ async fn test_operation_parser_failure_does_not_leak_details() {
         Arc::new(FailingOperationParser {
             internal_detail: internal_detail.to_string(),
         }),
-    )).await;
+    ))
+    .await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -175,7 +183,11 @@ async fn test_operation_parser_failure_does_not_leak_details() {
 
     // Assert that sensitive internal details are NOT leaked to client
     assert!(!err_str.contains("index 42"), "Leaked internal detail: {}", err_str);
-    assert!(!err_str.contains("0x7fff5fbff000"), "Leaked memory address: {}", err_str);
+    assert!(
+        !err_str.contains("0x7fff5fbff000"),
+        "Leaked memory address: {}",
+        err_str
+    );
 }
 
 #[tokio::test]
@@ -191,7 +203,8 @@ async fn test_aws_signing_with_suspicious_credentials_does_not_leak() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    )).await;
+    ))
+    .await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -212,9 +225,17 @@ async fn test_aws_signing_with_suspicious_credentials_does_not_leak() {
         let err_str = format!("{:?} {}", err, err);
 
         // Assert that sensitive credential details are NOT leaked to client
-        assert!(!err_str.contains("AKIA_INTERNAL_USE_ONLY"), "Leaked access key: {}", err_str);
+        assert!(
+            !err_str.contains("AKIA_INTERNAL_USE_ONLY"),
+            "Leaked access key: {}",
+            err_str
+        );
         assert!(!err_str.contains("secret_key_prod"), "Leaked secret key: {}", err_str);
-        assert!(!err_str.contains("us-east-1-internal-vpc"), "Leaked internal region: {}", err_str);
+        assert!(
+            !err_str.contains("us-east-1-internal-vpc"),
+            "Leaked internal region: {}",
+            err_str
+        );
     }
     // If it succeeds, that's fine - we're just checking no leakage occurs
 }
@@ -239,7 +260,8 @@ async fn test_jwt_verification_failure_message_is_generic() {
             internal_detail: internal_service.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    )).await;
+    ))
+    .await;
 
     // Configure client
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
@@ -261,9 +283,17 @@ async fn test_jwt_verification_failure_message_is_generic() {
     let err_str = format!("{:?} {}", err, err);
 
     // Assert that sensitive internal details are NOT leaked to client
-    assert!(!err_str.contains("keys.auth-service.internal"), "Leaked internal hostname: {}", err_str);
+    assert!(
+        !err_str.contains("keys.auth-service.internal"),
+        "Leaked internal hostname: {}",
+        err_str
+    );
     assert!(!err_str.contains("9000"), "Leaked internal port: {}", err_str);
-    assert!(!err_str.contains("req-abc-123-def"), "Leaked correlation ID: {}", err_str);
+    assert!(
+        !err_str.contains("req-abc-123-def"),
+        "Leaked correlation ID: {}",
+        err_str
+    );
     assert!(!err_str.contains("xyz-789"), "Leaked trace ID: {}", err_str);
 }
 
@@ -283,7 +313,8 @@ async fn test_internal_failures_use_generic_messages() {
             scope: TEST_BUCKET.to_string(),
         }),
         Arc::new(DefaultOperationParser),
-    )).await;
+    ))
+    .await;
 
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
     let config = aws_config::defaults(BehaviorVersion::latest())
@@ -304,6 +335,10 @@ async fn test_internal_failures_use_generic_messages() {
 
     // Assert that internal details are NOT leaked to client
     assert!(!err_str.contains("db-primary-01"), "Leaked hostname: {}", err_str);
-    assert!(!err_str.contains("us-west-2.rds.amazonaws.com"), "Leaked hostname: {}", err_str);
+    assert!(
+        !err_str.contains("us-west-2.rds.amazonaws.com"),
+        "Leaked hostname: {}",
+        err_str
+    );
     assert!(!err_str.contains("5432"), "Leaked port: {}", err_str);
 }

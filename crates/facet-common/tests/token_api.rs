@@ -15,13 +15,15 @@ mod common;
 use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
 use facet_common::context::ParticipantContext;
-use facet_common::jwt::jwtutils::{generate_ed25519_keypair_pem, StaticSigningKeyResolver, StaticVerificationKeyResolver};
-use facet_common::jwt::{LocalJwtGenerator, LocalJwtVerifier, JwtVerifier};
-use facet_common::util::clock::default_clock;
-use facet_common::util::encryption::encryption_key;
+use facet_common::jwt::jwtutils::{
+    StaticSigningKeyResolver, StaticVerificationKeyResolver, generate_ed25519_keypair_pem,
+};
+use facet_common::jwt::{JwtVerifier, LocalJwtGenerator, LocalJwtVerifier};
 use facet_common::lock::PostgresLockManager;
 use facet_common::token::oauth::OAuth2TokenClient;
 use facet_common::token::{PostgresTokenStore, TokenClientApi, TokenData, TokenStore};
+use facet_common::util::clock::default_clock;
+use facet_common::util::encryption::encryption_key;
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;
@@ -137,16 +139,12 @@ struct BearerTokenVerifier {
 
 impl BearerTokenVerifier {
     fn new(public_key: Vec<u8>, participant_context: ParticipantContext, expected_did: String) -> Self {
-        let verification_key_resolver = Arc::new(
-            StaticVerificationKeyResolver::builder()
-                .key(public_key)
-                .build()
-        );
+        let verification_key_resolver = Arc::new(StaticVerificationKeyResolver::builder().key(public_key).build());
 
         let verifier = Arc::new(
             LocalJwtVerifier::builder()
                 .verification_key_resolver(verification_key_resolver)
-                .build()
+                .build(),
         );
 
         Self {
@@ -181,5 +179,3 @@ impl Match for BearerTokenVerifier {
         claims.iss == self.expected_did && claims.sub == self.expected_did
     }
 }
-
-

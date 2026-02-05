@@ -10,13 +10,13 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use crate::context::ParticipantContext;
 use crate::token::{TokenData, TokenError, TokenStore};
+use crate::util::clock::{Clock, default_clock};
+use crate::util::encryption::{decrypt, encrypt};
 use async_trait::async_trait;
 use bon::Builder;
 use chrono::DateTime;
-use crate::context::ParticipantContext;
-use crate::util::clock::{default_clock, Clock};
-use crate::util::encryption::{decrypt, encrypt};
 use sodiumoxide::crypto::secretbox;
 use sqlx::PgPool;
 use std::sync::Arc;

@@ -10,14 +10,16 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+use crate::context::ParticipantContext;
+use crate::jwt::{
+    JwtGenerationError, JwtVerificationError, KeyFormat, KeyMaterial, SigningKeyResolver, VerificationKeyResolver,
+};
 use bon::Builder;
-use crate::jwt::{JwtGenerationError, JwtVerificationError, KeyFormat, KeyMaterial, SigningKeyResolver, VerificationKeyResolver};
 use ed25519_dalek::SigningKey;
 use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
 use rand::Rng;
 use rsa::rand_core::OsRng as RsaOsRng;
 use rsa::{RsaPrivateKey, RsaPublicKey};
-use crate::context::ParticipantContext;
 
 #[derive(Debug, Clone)]
 pub struct Ed25519Keypair {

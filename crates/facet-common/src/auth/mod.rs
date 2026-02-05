@@ -31,8 +31,8 @@ mod tests;
 mod mem;
 mod postgres;
 
-use bon::Builder;
 use crate::context::ParticipantContext;
+use bon::Builder;
 use regex::Regex;
 use thiserror::Error;
 
@@ -108,7 +108,8 @@ pub trait AuthorizationEvaluator: Sync + Send {
 pub trait RuleStore: Send + Sync {
     async fn get_rules(&self, participant_context: &ParticipantContext) -> Result<Vec<Rule>, AuthorizationError>;
     async fn save_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError>;
-    async fn remove_rule(&self, participant_context: &ParticipantContext, rule: Rule) -> Result<(), AuthorizationError>;
+    async fn remove_rule(&self, participant_context: &ParticipantContext, rule: Rule)
+    -> Result<(), AuthorizationError>;
     async fn remove_rules(&self, participant_context: &ParticipantContext) -> Result<(), AuthorizationError>;
 }
 

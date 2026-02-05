@@ -18,7 +18,6 @@ use thiserror::Error;
 #[error("{0}")]
 pub struct KeyError(pub String);
 
-
 /// Derives a cryptographic key from a password using Argon2id13.
 ///
 /// `password` - The password to derive the key from.
@@ -33,8 +32,8 @@ pub fn encryption_key(password: &str, salt_hex: &str) -> Result<secretbox::Key, 
     // Parse salt from config
     let salt_bytes = hex::decode(salt_hex).map_err(|e| KeyError(format!("Invalid salt: {}", e)))?;
 
-    let salt = pwhash::argon2id13::Salt::from_slice(&salt_bytes)
-        .ok_or_else(|| KeyError("Invalid salt size".to_string()))?;
+    let salt =
+        pwhash::argon2id13::Salt::from_slice(&salt_bytes).ok_or_else(|| KeyError("Invalid salt size".to_string()))?;
 
     // Derive key using Argon2id13
     let mut key_bytes = [0u8; 32]; // 256 bits
@@ -45,7 +44,7 @@ pub fn encryption_key(password: &str, salt_hex: &str) -> Result<secretbox::Key, 
         pwhash::argon2id13::OPSLIMIT_MODERATE,
         pwhash::argon2id13::MEMLIMIT_MODERATE,
     )
-        .map_err(|_| KeyError("Key derivation failed".to_string()))?;
+    .map_err(|_| KeyError("Key derivation failed".to_string()))?;
 
     secretbox::Key::from_slice(&key_bytes).ok_or_else(|| KeyError("Invalid key".to_string()))
 }
@@ -58,9 +57,12 @@ pub fn encrypt(encryption_key: &secretbox::Key, plaintext: &[u8]) -> (Vec<u8>, s
 }
 
 // Decrypt ciphertext using nonce
-pub fn decrypt(encryption_key: &secretbox::Key, ciphertext: &[u8], nonce: &secretbox::Nonce) -> Result<Vec<u8>, KeyError> {
-    secretbox::open(ciphertext, nonce, encryption_key)
-        .map_err(|_| KeyError("Decryption failed".to_string()))
+pub fn decrypt(
+    encryption_key: &secretbox::Key,
+    ciphertext: &[u8],
+    nonce: &secretbox::Nonce,
+) -> Result<Vec<u8>, KeyError> {
+    secretbox::open(ciphertext, nonce, encryption_key).map_err(|_| KeyError("Decryption failed".to_string()))
 }
 
 #[cfg(test)]

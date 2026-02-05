@@ -64,7 +64,7 @@ use crate::context::{ParticipantContext, ParticipantContextResolver};
 use crate::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
 use async_trait::async_trait;
 use aws_credential_types::Credentials;
-use aws_sigv4::http_request::{sign, SignableBody, SignableRequest, SigningSettings};
+use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use bon::Builder;
@@ -277,9 +277,7 @@ impl ProxyHttp for S3Proxy {
 
     fn new_ctx(&self) -> Self::CTX {
         S3ProxyContext {
-            participant_context: ParticipantContext::builder()
-                .id("anonymous")
-                .build(),
+            participant_context: ParticipantContext::builder().id("anonymous").build(),
             parsed_request: None,
         }
     }
@@ -521,4 +519,3 @@ impl S3CredentialResolver for StaticCredentialsResolver {
         Ok(self.credentials.clone())
     }
 }
-

@@ -17,10 +17,7 @@ use testcontainers_modules::postgres::Postgres;
 
 /// Helper to create a PostgreSQL container and connection pool
 pub async fn setup_postgres_container() -> (PgPool, testcontainers::ContainerAsync<Postgres>) {
-    let container = Postgres::default()
-        .start()
-        .await
-        .unwrap();
+    let container = Postgres::default().start().await.unwrap();
 
     let connection_string = format!(
         "postgresql://postgres:postgres@127.0.0.1:{}/postgres",
@@ -28,17 +25,14 @@ pub async fn setup_postgres_container() -> (PgPool, testcontainers::ContainerAsy
     );
 
     // Wait for PostgreSQL to be ready with timeout
-    let pool = tokio::time::timeout(
-        tokio::time::Duration::from_secs(5),
-        async {
-            loop {
-                match PgPool::connect(&connection_string).await {
-                    Ok(pool) => break pool,
-                    Err(_) => tokio::task::yield_now().await,
-                }
+    let pool = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+        loop {
+            match PgPool::connect(&connection_string).await {
+                Ok(pool) => break pool,
+                Err(_) => tokio::task::yield_now().await,
             }
         }
-    )
+    })
     .await
     .unwrap_or_else(|_| panic!("PostgreSQL launch failed"));
 

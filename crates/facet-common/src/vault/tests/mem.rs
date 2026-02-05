@@ -10,8 +10,8 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use crate::vault::{MemoryVaultClient, VaultClient, VaultError};
 use crate::context::ParticipantContext;
+use crate::vault::{MemoryVaultClient, VaultClient, VaultError};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
@@ -136,9 +136,7 @@ async fn test_concurrent_reads() {
     for _ in 0..10 {
         let client_clone = client.clone();
         let ctx_clone = ctx.clone();
-        let handle = tokio::spawn(async move {
-            client_clone.resolve_secret(&ctx_clone, "shared/path").await.unwrap()
-        });
+        let handle = tokio::spawn(async move { client_clone.resolve_secret(&ctx_clone, "shared/path").await.unwrap() });
         handles.push(handle);
     }
 
@@ -227,8 +225,14 @@ async fn test_participant_context_isolation() {
         audience: "participant-2-audience".to_string(),
     };
 
-    client.store_secret(&ctx1, "shared/path", "secret-for-p1").await.unwrap();
-    client.store_secret(&ctx2, "shared/path", "secret-for-p2").await.unwrap();
+    client
+        .store_secret(&ctx1, "shared/path", "secret-for-p1")
+        .await
+        .unwrap();
+    client
+        .store_secret(&ctx2, "shared/path", "secret-for-p2")
+        .await
+        .unwrap();
 
     let result1 = client.resolve_secret(&ctx1, "shared/path").await.unwrap();
     let result2 = client.resolve_secret(&ctx2, "shared/path").await.unwrap();

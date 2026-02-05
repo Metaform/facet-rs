@@ -11,8 +11,8 @@
 //
 
 use crate::lock::{LockError, LockManager, MemoryLockManager, UnlockOps};
-use chrono::{TimeDelta, Utc};
 use crate::util::clock::{Clock, MockClock};
+use chrono::{TimeDelta, Utc};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -531,7 +531,10 @@ async fn test_lock_count_expired_lock() {
 async fn test_lock_count_multiple_resources_different_owners() {
     let manager = MemoryLockManager::new();
     let _guard1 = manager.lock("resource1", "owner1").await.expect("Lock 1 failed");
-    let _guard2 = manager.lock("resource1", "owner1").await.expect("Lock 1 reentrant failed");
+    let _guard2 = manager
+        .lock("resource1", "owner1")
+        .await
+        .expect("Lock 1 reentrant failed");
     let _guard3 = manager.lock("resource2", "owner2").await.expect("Lock 2 failed");
     let _guard4 = manager.lock("resource3", "owner1").await.expect("Lock 3 failed");
 

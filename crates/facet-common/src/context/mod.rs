@@ -42,4 +42,3 @@ impl ParticipantContextResolver for StaticParticipantContextResolver {
         Ok(self.participant_context.clone())
     }
 }
-
