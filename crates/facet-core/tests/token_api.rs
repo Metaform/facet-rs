@@ -12,7 +12,6 @@
 
 mod common;
 
-use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
 use dsdk_facet_core::context::ParticipantContext;
 use dsdk_facet_core::jwt::jwtutils::{
@@ -24,6 +23,7 @@ use dsdk_facet_core::token::oauth::OAuth2TokenClient;
 use dsdk_facet_core::token::{PostgresTokenStore, TokenClientApi, TokenData, TokenStore};
 use dsdk_facet_core::util::clock::default_clock;
 use dsdk_facet_core::util::encryption::encryption_key;
+use dsdk_facet_testcontainers::postgres::setup_postgres_container;
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;

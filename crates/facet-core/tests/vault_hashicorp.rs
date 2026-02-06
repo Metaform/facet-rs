@@ -12,10 +12,10 @@
 
 mod common;
 
-use crate::common::{create_network, setup_keycloak_container, setup_vault_container};
 use dsdk_facet_core::context::ParticipantContext;
 use dsdk_facet_core::vault::VaultClient;
 use dsdk_facet_core::vault::hashicorp::{HashicorpVaultClient, HashicorpVaultConfig};
+use dsdk_facet_testcontainers::{vault::setup_vault_container, keycloak::setup_keycloak_container, utils::create_network};
 
 fn create_test_context() -> ParticipantContext {
     ParticipantContext {

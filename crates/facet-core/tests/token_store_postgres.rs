@@ -13,11 +13,12 @@
 mod common;
 
 use chrono::{TimeDelta, Utc};
-use common::{setup_postgres_container, truncate_to_micros};
+
 use dsdk_facet_core::context::ParticipantContext;
 use dsdk_facet_core::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
 use dsdk_facet_core::util::clock::{Clock, MockClock};
 use dsdk_facet_core::util::encryption::encryption_key;
+use dsdk_facet_testcontainers::postgres::{setup_postgres_container, truncate_to_micros};
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;

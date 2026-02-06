@@ -13,12 +13,17 @@
 mod common;
 
 use common::{
-    MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, PassthroughCredentialsResolver, ProxyConfig, TEST_BUCKET,
-    TestJwtVerifier, create_test_client, get_available_port, launch_s3proxy, setup_postgres_container,
+    PassthroughCredentialsResolver, ProxyConfig, TestJwtVerifier, create_test_client, get_available_port,
+    launch_s3proxy,
 };
+
 use dsdk_facet_core::auth::{AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore};
 use dsdk_facet_core::context::{ParticipantContext, StaticParticipantContextResolver};
 use dsdk_facet_core::proxy::s3::{DefaultS3OperationParser, S3Credentials, UpstreamStyle};
+use dsdk_facet_testcontainers::{
+    minio::{MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, TEST_BUCKET},
+    postgres::setup_postgres_container,
+};
 use std::sync::Arc;
 
 #[tokio::test]

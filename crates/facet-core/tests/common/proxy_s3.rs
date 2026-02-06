@@ -11,7 +11,6 @@
 //
 
 use super::mocks::{PassthroughCredentialsResolver, TestJwtVerifier, TokenMatchingJwtVerifier};
-use super::{MINIO_ACCESS_KEY, MINIO_SECRET_KEY};
 use aws_config::Region;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
@@ -22,6 +21,7 @@ use dsdk_facet_core::jwt::JwtVerifier;
 use dsdk_facet_core::proxy::s3::{
     DefaultS3OperationParser, S3CredentialResolver, S3Credentials, S3OperationParser, S3Proxy, UpstreamStyle,
 };
+use dsdk_facet_testcontainers::minio::{MINIO_ACCESS_KEY, MINIO_SECRET_KEY};
 use pingora::server::Server;
 use pingora::server::configuration::Opt;
 use pingora_proxy::http_proxy_service;

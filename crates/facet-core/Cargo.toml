@@ -34,10 +34,9 @@ reqwest = {workspace = true}
 log = {workspace = true}
 
 [dev-dependencies]
+dsdk-facet-testcontainers = { path = "../facet-testcontainers" }
 aws-sdk-s3 = { workspace = true }
 aws-config = { workspace = true }
-testcontainers = { workspace = true }
-testcontainers-modules = { workspace = true, features = ["hashicorp_vault"] }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 wiremock = { workspace = true }

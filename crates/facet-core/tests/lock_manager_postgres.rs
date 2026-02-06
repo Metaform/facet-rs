@@ -12,12 +12,12 @@
 
 mod common;
 
-use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
 use dsdk_facet_core::lock::LockError::{LockAlreadyHeld, LockNotFound};
 use dsdk_facet_core::lock::postgres::PostgresLockManager;
 use dsdk_facet_core::lock::{LockManager, UnlockOps};
 use dsdk_facet_core::util::clock::{Clock, MockClock};
+use dsdk_facet_testcontainers::postgres::setup_postgres_container;
 use std::sync::Arc;
 use uuid::Uuid;
 
