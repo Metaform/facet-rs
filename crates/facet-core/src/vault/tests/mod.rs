@@ -11,6 +11,4 @@
 //
 
 #[cfg(test)]
-mod hashicorp;
-#[cfg(test)]
 mod mem;

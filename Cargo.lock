@@ -1464,13 +1464,9 @@ name = "dsdk-facet-core"
 version = "0.0.1"
 dependencies = [
  "async-trait",
- "aws-config",
- "aws-credential-types",
- "aws-sdk-s3",
- "aws-sigv4",
- "aws-smithy-runtime-api",
  "bon",
  "chrono",
+ "dsdk-facet-postgres",
  "dsdk-facet-testcontainers",
  "ed25519-dalek",
  "hex",
@@ -1480,9 +1476,6 @@ dependencies = [
  "mockall",
  "once_cell",
  "pingora",
- "pingora-core",
- "pingora-http",
- "pingora-proxy",
  "pkcs8 0.10.2",
  "rand 0.9.2",
  "regex",
@@ -1492,7 +1485,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sodiumoxide",
- "sqlx",
  "thiserror 2.0.18",
  "tokio",
  "url",
@@ -1501,8 +1493,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "dsdk-facet-hashicorp-vault"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "bon",
+ "chrono",
+ "dsdk-facet-core",
+ "dsdk-facet-testcontainers",
+ "log",
+ "rand 0.9.2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
+name = "dsdk-facet-postgres"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "bon",
+ "chrono",
+ "dsdk-facet-core",
+ "dsdk-facet-testcontainers",
+ "once_cell",
+ "rand 0.9.2",
+ "serde",
+ "sodiumoxide",
+ "sqlx",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "dsdk-facet-proxy"
 version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "aws-sigv4",
+ "aws-smithy-runtime-api",
+ "bon",
+ "dsdk-facet-core",
+ "dsdk-facet-postgres",
+ "dsdk-facet-testcontainers",
+ "http 1.4.0",
+ "once_cell",
+ "pingora",
+ "pingora-core",
+ "pingora-http",
+ "pingora-proxy",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "dsdk-facet-testcontainers"
@@ -1698,10 +1748,6 @@ dependencies = [
  "parking",
  "pin-project-lite",
 ]
-
-[[package]]
-name = "facet-postgres"
-version = "0.0.1"
 
 [[package]]
 name = "fastrand"

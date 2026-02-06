@@ -147,7 +147,7 @@ pub async fn setup_keycloak_container(network: &str) -> (KeycloakSetup, testcont
     let ready = tokio::time::timeout(tokio::time::Duration::from_secs(30), async {
         loop {
             if client
-                .get(&format!("{}/realms/master", keycloak_url))
+                .get(format!("{}/realms/master", keycloak_url))
                 .send()
                 .await
                 .is_ok()

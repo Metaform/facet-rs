@@ -1,6 +1,5 @@
 use testcontainers::bollard::{Docker, secret::NetworkCreateRequest};
 
-
 /// Creates a Docker network and returns its name.
 ///
 /// Automatically cleans up old test networks matching the pattern "test-network-*"

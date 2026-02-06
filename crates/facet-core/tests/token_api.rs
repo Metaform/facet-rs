@@ -10,19 +10,18 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-mod common;
-
 use chrono::{TimeDelta, Utc};
 use dsdk_facet_core::context::ParticipantContext;
 use dsdk_facet_core::jwt::jwtutils::{
     StaticSigningKeyResolver, StaticVerificationKeyResolver, generate_ed25519_keypair_pem,
 };
 use dsdk_facet_core::jwt::{JwtVerifier, LocalJwtGenerator, LocalJwtVerifier};
-use dsdk_facet_core::lock::PostgresLockManager;
 use dsdk_facet_core::token::oauth::OAuth2TokenClient;
-use dsdk_facet_core::token::{PostgresTokenStore, TokenClientApi, TokenData, TokenStore};
+use dsdk_facet_core::token::{TokenClientApi, TokenData, TokenStore};
 use dsdk_facet_core::util::clock::default_clock;
 use dsdk_facet_core::util::encryption::encryption_key;
+use dsdk_facet_postgres::lock::PostgresLockManager;
+use dsdk_facet_postgres::token::PostgresTokenStore;
 use dsdk_facet_testcontainers::postgres::setup_postgres_container;
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;

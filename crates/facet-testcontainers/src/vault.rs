@@ -44,7 +44,7 @@ pub async fn setup_vault_container_with_ttl(
 
     // Wait for Vault to be ready
     for _ in 0..30 {
-        if client.get(&format!("{}/v1/sys/health", vault_url)).send().await.is_ok() {
+        if client.get(format!("{}/v1/sys/health", vault_url)).send().await.is_ok() {
             break;
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -52,7 +52,7 @@ pub async fn setup_vault_container_with_ttl(
 
     // Enable JWT auth method
     let enable_jwt = client
-        .post(&format!("{}/v1/sys/auth/jwt", vault_url))
+        .post(format!("{}/v1/sys/auth/jwt", vault_url))
         .header("X-Vault-Token", root_token)
         .json(&json!({
             "type": "jwt"
@@ -69,7 +69,7 @@ pub async fn setup_vault_container_with_ttl(
 
     // Configure JWT auth with Keycloak JWKS URL
     let config_jwt = client
-        .post(&format!("{}/v1/auth/jwt/config", vault_url))
+        .post(format!("{}/v1/auth/jwt/config", vault_url))
         .header("X-Vault-Token", root_token)
         .json(&json!({
             "jwks_url": keycloak_jwks_url,
@@ -87,7 +87,7 @@ pub async fn setup_vault_container_with_ttl(
 
     // Create a policy for secret access
     let create_policy = client
-        .put(&format!("{}/v1/sys/policy/test-policy", vault_url))
+        .put(format!("{}/v1/sys/policy/test-policy", vault_url))
         .header("X-Vault-Token", root_token)
         .json(&json!({
             "policy": "path \"secret/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}"
@@ -105,7 +105,7 @@ pub async fn setup_vault_container_with_ttl(
     // Create a role for JWT authentication matching Keycloak token structure
     let keycloak_issuer = format!("http://{}:8080/realms/master", keycloak_container_id);
     let create_role = client
-        .post(&format!("{}/v1/auth/jwt/role/provisioner", vault_url))
+        .post(format!("{}/v1/auth/jwt/role/provisioner", vault_url))
         .header("X-Vault-Token", root_token)
         .json(&json!({
             "role_type": "jwt",

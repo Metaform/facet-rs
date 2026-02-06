@@ -10,8 +10,6 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-pub mod hashicorp;
-
 #[cfg(test)]
 mod tests;
 

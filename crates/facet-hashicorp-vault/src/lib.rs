@@ -10,15 +10,18 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
+#[doc(hidden)]
 pub mod auth;
-pub mod context;
-pub mod jwt;
-pub mod lock;
-pub mod token;
-pub mod util;
-pub mod vault;
+mod client;
+#[doc(hidden)]
+pub mod config;
+#[doc(hidden)]
+pub mod renewal;
+#[doc(hidden)]
+pub mod state;
 
 #[cfg(test)]
-pub mod test_fixtures {
-    pub use crate::jwt::jwtutils::*;
-}
+mod tests;
+
+pub use client::HashicorpVaultClient;
+pub use config::{ErrorCallback, HashicorpVaultConfig, HashicorpVaultConfigBuilder};

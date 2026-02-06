@@ -12,13 +12,11 @@
 
 pub mod mem;
 pub mod oauth;
-pub mod postgres;
 
 #[cfg(test)]
 mod tests;
 
 pub use mem::MemoryTokenStore;
-pub use postgres::PostgresTokenStore;
 
 const FIVE_SECONDS_MILLIS: i64 = 5_000;
 

@@ -131,10 +131,10 @@ impl MinioInstance {
     /// Verify object content matches the expected value bypassing the proxy.
     pub async fn verify_object_content(&self, bucket: &str, key: &str, expected: &[u8]) -> bool {
         let client = create_direct_minio_client(&self.endpoint).await;
-        if let Ok(response) = client.get_object().bucket(bucket).key(key).send().await {
-            if let Ok(body) = response.body.collect().await {
-                return body.to_vec() == expected;
-            }
+        if let Ok(response) = client.get_object().bucket(bucket).key(key).send().await
+            && let Ok(body) = response.body.collect().await
+        {
+            return body.to_vec() == expected;
         }
         false
     }

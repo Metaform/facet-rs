@@ -16,11 +16,9 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub mod mem;
-pub mod postgres;
 mod tests;
 
 pub use mem::MemoryLockManager;
-pub use postgres::PostgresLockManager;
 
 /// Provide distributed locking for coordinating access to shared resources.
 ///
@@ -118,9 +116,9 @@ pub struct LockGuard {
 }
 
 impl LockGuard {
-    pub(crate) fn new<T>(lock_manager: Arc<T>, identifier: impl Into<String>, owner: impl Into<String>) -> Self
+    pub fn new<T>(lock_manager: Arc<T>, identifier: impl Into<String>, owner: impl Into<String>) -> Self
     where
-        T: LockManagerInternal + 'static,
+        T: LockManager + UnlockOps + 'static,
     {
         Self {
             lock_manager,
