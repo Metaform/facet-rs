@@ -102,7 +102,7 @@ impl<T: LockManager + UnlockOps> LockManagerInternal for T {}
 ///
 /// ```no_run
 /// # use std::sync::Arc;
-/// # use facet_common::lock::{LockManager, MemoryLockManager};
+/// # use dsdk_facet_core::lock::{LockManager, MemoryLockManager};
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let manager = Arc::new(MemoryLockManager::new());
 /// let _guard = manager.lock("resource", "owner").await?;

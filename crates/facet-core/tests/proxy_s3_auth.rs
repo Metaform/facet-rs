@@ -20,7 +20,7 @@ use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region};
 use aws_sdk_s3::primitives::ByteStream;
-use facet_common::auth::MemoryAuthorizationEvaluator;
+use dsdk_facet_core::auth::MemoryAuthorizationEvaluator;
 use std::sync::Arc;
 
 // ==================== Object GET Operations - Allow ====================

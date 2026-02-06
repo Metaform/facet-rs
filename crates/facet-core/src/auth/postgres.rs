@@ -23,7 +23,7 @@ use sqlx::PgPool;
 ///
 /// ```ignore
 /// use sqlx::PgPool;
-/// use facet_common::auth::postgres::PostgresAuthorizationEvaluator;
+/// use dsdk_facet_core::auth::postgres::PostgresAuthorizationEvaluator;
 ///
 /// // Create a connection pool
 /// let pool = PgPool::connect("postgres://user:pass@localhost/db").await?;

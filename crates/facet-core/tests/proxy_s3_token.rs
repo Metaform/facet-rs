@@ -19,7 +19,7 @@ use crate::common::{
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{Credentials, Region};
-use facet_common::proxy::s3::UpstreamStyle;
+use dsdk_facet_core::proxy::s3::UpstreamStyle;
 
 const TEST_CONTENT: &str = "Hello from Pingora proxy test!";
 const VALID_SESSION_TOKEN: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";

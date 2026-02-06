@@ -13,10 +13,10 @@
 mod common;
 
 use crate::common::setup_postgres_container;
-use facet_common::auth::{
+use dsdk_facet_core::auth::{
     AuthorizationError, AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore,
 };
-use facet_common::context::ParticipantContext;
+use dsdk_facet_core::context::ParticipantContext;
 use std::sync::Arc;
 
 #[tokio::test]

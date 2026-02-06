@@ -16,10 +16,10 @@ use aws_config::Region;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
 use aws_smithy_runtime_api::client::behavior_version::BehaviorVersion;
-use facet_common::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, RuleStore};
-use facet_common::context::{ParticipantContext, ParticipantContextResolver, StaticParticipantContextResolver};
-use facet_common::jwt::JwtVerifier;
-use facet_common::proxy::s3::{
+use dsdk_facet_core::auth::{AuthorizationEvaluator, MemoryAuthorizationEvaluator, RuleStore};
+use dsdk_facet_core::context::{ParticipantContext, ParticipantContextResolver, StaticParticipantContextResolver};
+use dsdk_facet_core::jwt::JwtVerifier;
+use dsdk_facet_core::proxy::s3::{
     DefaultS3OperationParser, S3CredentialResolver, S3Credentials, S3OperationParser, S3Proxy, UpstreamStyle,
 };
 use pingora::server::Server;
@@ -126,7 +126,7 @@ impl ProxyConfig {
         });
 
         let auth_evaluator = Arc::new(MemoryAuthorizationEvaluator::new());
-        let rule = facet_common::auth::Rule::new(scope, vec!["s3:GetObject".to_string()], ".*".to_string())
+        let rule = dsdk_facet_core::auth::Rule::new(scope, vec!["s3:GetObject".to_string()], ".*".to_string())
             .expect("Failed to create authorization rule");
         let ctx = &ParticipantContext::builder()
             .id("proxy")
@@ -243,7 +243,7 @@ pub async fn add_auth_rule(
     actions: Vec<&str>,
     resource_pattern: &str,
 ) {
-    let rule = facet_common::auth::Rule::new(
+    let rule = dsdk_facet_core::auth::Rule::new(
         scope.to_string(),
         actions.into_iter().map(String::from).collect(),
         resource_pattern.to_string(),

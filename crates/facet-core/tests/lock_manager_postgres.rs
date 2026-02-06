@@ -14,10 +14,10 @@ mod common;
 
 use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
-use facet_common::lock::LockError::{LockAlreadyHeld, LockNotFound};
-use facet_common::lock::postgres::PostgresLockManager;
-use facet_common::lock::{LockManager, UnlockOps};
-use facet_common::util::clock::{Clock, MockClock};
+use dsdk_facet_core::lock::LockError::{LockAlreadyHeld, LockNotFound};
+use dsdk_facet_core::lock::postgres::PostgresLockManager;
+use dsdk_facet_core::lock::{LockManager, UnlockOps};
+use dsdk_facet_core::util::clock::{Clock, MockClock};
 use std::sync::Arc;
 use uuid::Uuid;
 

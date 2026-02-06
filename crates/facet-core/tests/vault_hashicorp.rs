@@ -13,9 +13,9 @@
 mod common;
 
 use crate::common::{create_network, setup_keycloak_container, setup_vault_container};
-use facet_common::context::ParticipantContext;
-use facet_common::vault::VaultClient;
-use facet_common::vault::hashicorp::{HashicorpVaultClient, HashicorpVaultConfig};
+use dsdk_facet_core::context::ParticipantContext;
+use dsdk_facet_core::vault::VaultClient;
+use dsdk_facet_core::vault::hashicorp::{HashicorpVaultClient, HashicorpVaultConfig};
 
 fn create_test_context() -> ParticipantContext {
     ParticipantContext {
@@ -142,7 +142,7 @@ async fn test_vault_client_integration() {
         assert!(result.is_err(), "Expected error for non-existent secret");
 
         match result {
-            Err(facet_common::vault::VaultError::SecretNotFound(identifier)) => {
+            Err(dsdk_facet_core::vault::VaultError::SecretNotFound(identifier)) => {
                 assert_eq!(identifier, "nonexistent/path");
             }
             _ => panic!("Expected SecretNotFound error"),

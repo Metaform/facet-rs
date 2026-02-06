@@ -10,10 +10,10 @@
 //       Metaform Systems, Inc. - initial API and implementation
 //
 
-use facet_common::auth::{AuthorizationError, AuthorizationEvaluator, Operation};
-use facet_common::context::ParticipantContext;
-use facet_common::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
-use facet_common::proxy::s3::{S3CredentialResolver, S3Credentials, S3OperationParser};
+use dsdk_facet_core::auth::{AuthorizationError, AuthorizationEvaluator, Operation};
+use dsdk_facet_core::context::ParticipantContext;
+use dsdk_facet_core::jwt::{JwtVerificationError, JwtVerifier, TokenClaims};
+use dsdk_facet_core::proxy::s3::{S3CredentialResolver, S3Credentials, S3OperationParser};
 use pingora_core::Result;
 use pingora_http::RequestHeader;
 use serde_json::{Map, Value};
@@ -127,7 +127,7 @@ pub struct FailingCredentialResolver {
 
 impl S3CredentialResolver for FailingCredentialResolver {
     fn resolve_credentials(&self, _context: &ParticipantContext) -> Result<S3Credentials> {
-        Err(facet_common::proxy::s3::internal_error(format!(
+        Err(dsdk_facet_core::proxy::s3::internal_error(format!(
             "Database connection to {} failed: timeout after 30s, last error: connection refused",
             self.internal_detail
         )))
@@ -160,7 +160,7 @@ pub struct FailingOperationParser {
 
 impl S3OperationParser for FailingOperationParser {
     fn parse_operation(&self, _scope: &str, _request: &RequestHeader) -> Result<Operation> {
-        Err(facet_common::proxy::s3::internal_error(format!(
+        Err(dsdk_facet_core::proxy::s3::internal_error(format!(
             "Parser cache corrupted at {}, memory address 0x7fff5fbff000, stack trace: [parser.rs:123]",
             self.internal_detail
         )))

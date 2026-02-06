@@ -43,14 +43,14 @@ use std::sync::Arc;
 /// must be consistent across instances and restarts and should be stored securely:
 ///
 /// ```no_run
-/// # use facet_common::token::PostgresTokenStore;
+/// # use dsdk_facet_core::token::PostgresTokenStore;
 /// # use sqlx::PgPool;
 ///
 /// # async fn launch() -> Result<(), Box<dyn std::error::Error>> {
 /// let pool = PgPool::connect("").await?;
 /// let password = std::env::var("ENCRYPTION_PASSWORD")?;
 /// let salt_hex = std::env::var("ENCRYPTION_SALT")?;
-/// let key = facet_common::util::encryption::encryption_key(&password, &salt_hex)?;
+/// let key = dsdk_facet_core::util::encryption::encryption_key(&password, &salt_hex)?;
 ///
 /// let store = PostgresTokenStore::builder()
 ///     .pool(pool)

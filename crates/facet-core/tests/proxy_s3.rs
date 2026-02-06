@@ -16,9 +16,9 @@ use common::{
     MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MinioInstance, PassthroughCredentialsResolver, ProxyConfig, TEST_BUCKET,
     TestJwtVerifier, create_test_client, get_available_port, launch_s3proxy, setup_postgres_container,
 };
-use facet_common::auth::{AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore};
-use facet_common::context::{ParticipantContext, StaticParticipantContextResolver};
-use facet_common::proxy::s3::{DefaultS3OperationParser, S3Credentials, UpstreamStyle};
+use dsdk_facet_core::auth::{AuthorizationEvaluator, Operation, PostgresAuthorizationEvaluator, Rule, RuleStore};
+use dsdk_facet_core::context::{ParticipantContext, StaticParticipantContextResolver};
+use dsdk_facet_core::proxy::s3::{DefaultS3OperationParser, S3Credentials, UpstreamStyle};
 use std::sync::Arc;
 
 #[tokio::test]

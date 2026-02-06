@@ -42,7 +42,7 @@
 //! # Examples
 //!
 //! ```ignore
-//! use facet_common::proxy::s3::{S3Proxy, UpstreamStyle};
+//! use dsdk_facet_core::proxy::s3::{S3Proxy, UpstreamStyle};
 //!
 //! let proxy = S3Proxy::builder()
 //!     .use_tls(true)

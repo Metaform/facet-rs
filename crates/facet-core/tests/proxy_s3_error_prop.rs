@@ -90,7 +90,7 @@ async fn test_authorization_evaluator_failure_does_not_leak_details() {
     launch_s3proxy(ProxyConfig::for_error_testing(
         proxy_port,
         Arc::new(PassthroughCredentialsResolver {
-            credentials: facet_common::proxy::s3::S3Credentials {
+            credentials: dsdk_facet_core::proxy::s3::S3Credentials {
                 access_key_id: "test-key".to_string(),
                 secret_key: "test-secret".to_string(),
                 region: "us-east-1".to_string(),
@@ -146,7 +146,7 @@ async fn test_operation_parser_failure_does_not_leak_details() {
     launch_s3proxy(ProxyConfig::for_error_testing(
         proxy_port,
         Arc::new(PassthroughCredentialsResolver {
-            credentials: facet_common::proxy::s3::S3Credentials {
+            credentials: dsdk_facet_core::proxy::s3::S3Credentials {
                 access_key_id: "test-key".to_string(),
                 secret_key: "test-secret".to_string(),
                 region: "us-east-1".to_string(),
@@ -249,7 +249,7 @@ async fn test_jwt_verification_failure_message_is_generic() {
     launch_s3proxy(ProxyConfig::for_error_testing(
         proxy_port,
         Arc::new(PassthroughCredentialsResolver {
-            credentials: facet_common::proxy::s3::S3Credentials {
+            credentials: dsdk_facet_core::proxy::s3::S3Credentials {
                 access_key_id: "test-key".to_string(),
                 secret_key: "test-secret".to_string(),
                 region: "us-east-1".to_string(),

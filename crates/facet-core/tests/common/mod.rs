@@ -22,7 +22,7 @@ mod proxy_s3;
 mod vault;
 
 use chrono::{TimeDelta, Utc};
-use facet_common::vault::hashicorp::state::VaultClientState;
+use dsdk_facet_core::vault::hashicorp::state::VaultClientState;
 #[allow(unused_imports)] // Used in some test files but not others
 pub use keycloak::*;
 #[allow(unused_imports)] // Used in some test files but not others

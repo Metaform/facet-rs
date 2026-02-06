@@ -14,16 +14,16 @@ mod common;
 
 use crate::common::setup_postgres_container;
 use chrono::{TimeDelta, Utc};
-use facet_common::context::ParticipantContext;
-use facet_common::jwt::jwtutils::{
+use dsdk_facet_core::context::ParticipantContext;
+use dsdk_facet_core::jwt::jwtutils::{
     StaticSigningKeyResolver, StaticVerificationKeyResolver, generate_ed25519_keypair_pem,
 };
-use facet_common::jwt::{JwtVerifier, LocalJwtGenerator, LocalJwtVerifier};
-use facet_common::lock::PostgresLockManager;
-use facet_common::token::oauth::OAuth2TokenClient;
-use facet_common::token::{PostgresTokenStore, TokenClientApi, TokenData, TokenStore};
-use facet_common::util::clock::default_clock;
-use facet_common::util::encryption::encryption_key;
+use dsdk_facet_core::jwt::{JwtVerifier, LocalJwtGenerator, LocalJwtVerifier};
+use dsdk_facet_core::lock::PostgresLockManager;
+use dsdk_facet_core::token::oauth::OAuth2TokenClient;
+use dsdk_facet_core::token::{PostgresTokenStore, TokenClientApi, TokenData, TokenStore};
+use dsdk_facet_core::util::clock::default_clock;
+use dsdk_facet_core::util::encryption::encryption_key;
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;

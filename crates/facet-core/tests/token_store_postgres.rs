@@ -14,10 +14,10 @@ mod common;
 
 use chrono::{TimeDelta, Utc};
 use common::{setup_postgres_container, truncate_to_micros};
-use facet_common::context::ParticipantContext;
-use facet_common::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
-use facet_common::util::clock::{Clock, MockClock};
-use facet_common::util::encryption::encryption_key;
+use dsdk_facet_core::context::ParticipantContext;
+use dsdk_facet_core::token::{PostgresTokenStore, TokenData, TokenError, TokenStore};
+use dsdk_facet_core::util::clock::{Clock, MockClock};
+use dsdk_facet_core::util::encryption::encryption_key;
 use once_cell::sync::Lazy;
 use sodiumoxide::crypto::secretbox;
 use std::sync::Arc;

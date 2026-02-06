@@ -16,12 +16,12 @@
 mod common;
 
 use crate::common::{wait_for_condition, wrapped_test_state};
-use facet_common::util::clock::default_clock;
-use facet_common::vault::hashicorp::auth::JwtVaultAuthClient;
-use facet_common::vault::hashicorp::config::DEFAULT_ROLE;
-use facet_common::vault::hashicorp::renewal::TokenRenewer;
-use facet_common::vault::hashicorp::state::VaultClientState;
-use facet_common::vault::hashicorp::{ErrorCallback, HashicorpVaultConfig};
+use dsdk_facet_core::util::clock::default_clock;
+use dsdk_facet_core::vault::hashicorp::auth::JwtVaultAuthClient;
+use dsdk_facet_core::vault::hashicorp::config::DEFAULT_ROLE;
+use dsdk_facet_core::vault::hashicorp::renewal::TokenRenewer;
+use dsdk_facet_core::vault::hashicorp::state::VaultClientState;
+use dsdk_facet_core::vault::hashicorp::{ErrorCallback, HashicorpVaultConfig};
 use reqwest::Client;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

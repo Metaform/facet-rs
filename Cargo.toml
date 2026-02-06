@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/facet-common", "crates/facet-consumer"]
+members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
