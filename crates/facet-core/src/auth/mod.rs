@@ -29,7 +29,6 @@
 mod tests;
 
 mod mem;
-mod postgres;
 
 use crate::context::ParticipantContext;
 use bon::Builder;
@@ -37,7 +36,6 @@ use regex::Regex;
 use thiserror::Error;
 
 pub use mem::MemoryAuthorizationEvaluator;
-pub use postgres::PostgresAuthorizationEvaluator;
 
 /// Represents an operation with specific attributes that describe its scope, action, and resource.
 ///

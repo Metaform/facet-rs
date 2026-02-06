@@ -1,0 +1,21 @@
+[package]
+name = "dsdk-facet-postgres"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dsdk-facet-core = { path = "../facet-core" }
+sqlx = {workspace = true}
+async-trait = {workspace = true}
+bon = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+sodiumoxide = { workspace = true }
+
+[dev-dependencies]
+dsdk-facet-testcontainers = { path = "../facet-testcontainers" }
+tokio = { workspace = true }
+uuid = { workspace = true }
+once_cell = { workspace = true }

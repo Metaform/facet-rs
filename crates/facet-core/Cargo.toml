@@ -15,32 +15,23 @@ serde_json = { workspace = true }
 rand = { workspace = true }
 ed25519-dalek = { workspace = true }
 pkcs8 = { workspace = true }
-rstest = { workspace = true }
 rsa = { workspace = true }
 async-trait = {workspace = true}
 http = {workspace = true}
 pingora = {workspace = true}
-pingora-core = {workspace = true}
-pingora-proxy = {workspace = true}
-pingora-http = "0.6"
-aws-sigv4 = "1.2"
-aws-credential-types = {workspace = true}
-aws-smithy-runtime-api = {workspace = true}
 regex = {workspace = true}
 url = "2.5"
-sqlx = {workspace = true}
 tokio = {workspace = true}
 reqwest = {workspace = true}
 log = {workspace = true}
 
 [dev-dependencies]
-aws-sdk-s3 = { workspace = true }
-aws-config = { workspace = true }
-testcontainers = { workspace = true }
-testcontainers-modules = { workspace = true, features = ["hashicorp_vault"] }
+dsdk-facet-testcontainers = { path = "../facet-testcontainers" }
+dsdk-facet-postgres = { path = "../facet-postgres" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 wiremock = { workspace = true }
 uuid = { workspace = true }
 once_cell = { workspace = true }
 mockall = { workspace = true }
+rstest = { workspace = true }
