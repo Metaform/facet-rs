@@ -61,7 +61,22 @@ impl VaultError {
 
 /// In-memory vault client for testing.
 pub struct MemoryVaultClient {
-    secrets: RwLock<HashMap<String, String>>,
+    pub secrets: RwLock<HashMap<String, String>>,
+}
+
+impl MemoryVaultClient {
+    /// Creates a new empty in-memory vault client.
+    pub fn new() -> Self {
+        Self {
+            secrets: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
+impl Default for MemoryVaultClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]

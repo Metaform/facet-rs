@@ -11,10 +11,14 @@
 //
 
 use crate::context::ParticipantContext;
-use crate::jwt::jwtutils::{generate_ed25519_keypair_der, generate_ed25519_keypair_pem, generate_rsa_keypair_pem};
+use crate::jwt::jwtutils::{
+    generate_ed25519_keypair_der, generate_ed25519_keypair_pem, generate_rsa_keypair_pem,
+    SigningKeyRecord, VaultSigningKeyResolver,
+};
 use crate::jwt::{JwtGenerator, JwtVerificationError, JwtVerifier, TokenClaims};
 use crate::jwt::{KeyFormat, LocalJwtGenerator, LocalJwtVerifier, SigningAlgorithm};
 use crate::test_fixtures::{StaticSigningKeyResolver, StaticVerificationKeyResolver};
+use crate::vault::{MemoryVaultClient, VaultClient};
 use chrono::Utc;
 use rstest::rstest;
 use std::sync::Arc;
@@ -85,7 +89,8 @@ fn create_test_verifier_with_leeway(
 #[rstest]
 #[case(KeyFormat::PEM)]
 #[case(KeyFormat::DER)]
-fn test_token_generation_validation(#[case] key_format: KeyFormat) {
+#[tokio::test]
+async fn test_token_generation_validation(#[case] key_format: KeyFormat) {
     let keypair = match key_format {
         KeyFormat::PEM => generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair"),
         KeyFormat::DER => generate_ed25519_keypair_der().expect("Failed to generate DER keypair"),
@@ -123,6 +128,7 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(keypair.public_key, key_format, SigningAlgorithm::EdDSA);
@@ -140,8 +146,8 @@ fn test_token_generation_validation(#[case] key_format: KeyFormat) {
     );
 }
 
-#[test]
-fn test_expired_token_validation_pem_eddsa() {
+#[tokio::test]
+async fn test_expired_token_validation_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -168,6 +174,7 @@ fn test_expired_token_validation_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
@@ -178,8 +185,8 @@ fn test_expired_token_validation_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::TokenExpired));
 }
 
-#[test]
-fn test_leeway_allows_recently_expired_token_pem_eddsa() {
+#[tokio::test]
+async fn test_leeway_allows_recently_expired_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -205,6 +212,7 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should accept token expired 20 seconds ago
@@ -218,8 +226,8 @@ fn test_leeway_allows_recently_expired_token_pem_eddsa() {
     assert_eq!(verified_claims.iss, "issuer-leeway");
 }
 
-#[test]
-fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
+#[tokio::test]
+async fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -246,6 +254,7 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should reject token expired 100 seconds ago
@@ -257,8 +266,8 @@ fn test_leeway_rejects_token_expired_beyond_leeway_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::TokenExpired));
 }
 
-#[test]
-fn test_invalid_signature_pem_eddsa() {
+#[tokio::test]
+async fn test_invalid_signature_pem_eddsa() {
     let keypair1 = generate_ed25519_keypair_pem().expect("Failed to generate keypair 1");
     let keypair2 = generate_ed25519_keypair_pem().expect("Failed to generate keypair 2");
 
@@ -286,6 +295,7 @@ fn test_invalid_signature_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Try to verify with a different public key
@@ -297,8 +307,8 @@ fn test_invalid_signature_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::InvalidSignature));
 }
 
-#[test]
-fn test_malformed_token_pem_eddsa() {
+#[tokio::test]
+async fn test_malformed_token_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
@@ -332,8 +342,8 @@ fn test_malformed_token_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::InvalidFormat));
 }
 
-#[test]
-fn test_mismatched_key_format_pem_eddsa() {
+#[tokio::test]
+async fn test_mismatched_key_format_pem_eddsa() {
     let pc = &ParticipantContext::builder()
         .id("participant-1")
         .audience("audience-123")
@@ -359,6 +369,7 @@ fn test_mismatched_key_format_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let keypair_der = generate_ed25519_keypair_der().expect("Failed to generate DER keypair");
@@ -371,8 +382,8 @@ fn test_mismatched_key_format_pem_eddsa() {
     assert!(result.is_err());
 }
 
-#[test]
-fn test_rsa_token_generation_validation_pem() {
+#[tokio::test]
+async fn test_rsa_token_generation_validation_pem() {
     let keypair = generate_rsa_keypair_pem().expect("Failed to generate RSA PEM keypair");
 
     let generator = create_test_generator(
@@ -403,6 +414,7 @@ fn test_rsa_token_generation_validation_pem() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::RS256);
@@ -420,8 +432,8 @@ fn test_rsa_token_generation_validation_pem() {
     );
 }
 
-#[test]
-fn test_audience_mismatch_pem_eddsa() {
+#[tokio::test]
+async fn test_audience_mismatch_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -448,6 +460,7 @@ fn test_audience_mismatch_pem_eddsa() {
 
     let token = generator
         .generate_token(pc_generate, claims)
+        .await
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
@@ -467,8 +480,8 @@ fn test_audience_mismatch_pem_eddsa() {
     ));
 }
 
-#[test]
-fn test_algorithm_mismatch_pem() {
+#[tokio::test]
+async fn test_algorithm_mismatch_pem() {
     let keypair_eddsa = generate_ed25519_keypair_pem().expect("Failed to generate EdDSA keypair");
     let keypair_rsa = generate_rsa_keypair_pem().expect("Failed to generate RSA keypair");
 
@@ -497,6 +510,7 @@ fn test_algorithm_mismatch_pem() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Try to verify EdDSA token with RS256 verifier
@@ -508,8 +522,8 @@ fn test_algorithm_mismatch_pem() {
     assert!(result.is_err());
 }
 
-#[test]
-fn test_not_before_validation_pem_eddsa() {
+#[tokio::test]
+async fn test_not_before_validation_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -537,6 +551,7 @@ fn test_not_before_validation_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
@@ -547,8 +562,8 @@ fn test_not_before_validation_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::TokenNotYetValid));
 }
 
-#[test]
-fn test_not_before_with_leeway_pem_eddsa() {
+#[tokio::test]
+async fn test_not_before_with_leeway_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -576,6 +591,7 @@ fn test_not_before_with_leeway_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should accept token with nbf 20 seconds in the future
@@ -589,8 +605,8 @@ fn test_not_before_with_leeway_pem_eddsa() {
     assert_eq!(verified_claims.nbf, Some(now + 20));
 }
 
-#[test]
-fn test_not_before_beyond_leeway_pem_eddsa() {
+#[tokio::test]
+async fn test_not_before_beyond_leeway_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -618,6 +634,7 @@ fn test_not_before_beyond_leeway_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Verifier with 30-second leeway should reject token with nbf 100 seconds in the future
@@ -629,8 +646,8 @@ fn test_not_before_beyond_leeway_pem_eddsa() {
     assert!(matches!(result.unwrap_err(), JwtVerificationError::TokenNotYetValid));
 }
 
-#[test]
-fn test_generator_sets_iat_automatically_pem_eddsa() {
+#[tokio::test]
+async fn test_generator_sets_iat_automatically_pem_eddsa() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let generator = create_test_generator(
@@ -662,6 +679,7 @@ fn test_generator_sets_iat_automatically_pem_eddsa() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     let after_generation = Utc::now().timestamp();
@@ -686,8 +704,8 @@ fn test_generator_sets_iat_automatically_pem_eddsa() {
     );
 }
 
-#[test]
-fn test_kid_and_iss_are_set_correctly_in_generated_token() {
+#[tokio::test]
+async fn test_kid_and_iss_are_set_correctly_in_generated_token() {
     let keypair = generate_ed25519_keypair_pem().expect("Failed to generate PEM keypair");
 
     let expected_iss = "did:web:example.com";
@@ -714,6 +732,7 @@ fn test_kid_and_iss_are_set_correctly_in_generated_token() {
 
     let token = generator
         .generate_token(pc, claims)
+        .await
         .expect("Token generation should succeed");
 
     // Verify kid in header
@@ -725,4 +744,316 @@ fn test_kid_and_iss_are_set_correctly_in_generated_token() {
         .expect("Should be able to decode claims")
         .claims;
     assert_eq!(unverified_claims.iss, expected_iss, "iss claim should match");
+}
+
+#[tokio::test]
+async fn test_vault_signing_key_resolver_successful_resolution() {
+    // Setup vault client with a stored key
+    let keypair = generate_ed25519_keypair_pem().expect("Failed to generate keypair");
+    let vault_client = Arc::new(MemoryVaultClient::new());
+
+    let pc = ParticipantContext::builder()
+        .id("test-participant")
+        .identifier("did:web:example.com")
+        .audience("test-audience")
+        .build();
+
+    // Create and store a SigningKeyRecord as JSON in the vault
+    let key_record = SigningKeyRecord::builder()
+        .private_key(std::str::from_utf8(&keypair.private_key).unwrap())
+        .kid("did:web:example.com#key-1")
+        .key_format(KeyFormat::PEM)
+        .build();
+
+    let key_record_json = serde_json::to_string(&key_record).expect("Failed to serialize SigningKeyRecord");
+
+    vault_client
+        .store_secret(&pc, "signing-key", &key_record_json)
+        .await
+        .expect("Failed to store secret");
+
+    // Create the vault signing key resolver
+    let vault_resolver = Arc::new(
+        VaultSigningKeyResolver::builder()
+            .vault_client(vault_client)
+            .base_path("signing-key")
+            .build(),
+    );
+
+    // Create generator with vault resolver
+    let generator = LocalJwtGenerator::builder()
+        .signing_key_resolver(vault_resolver)
+        .signing_algorithm(SigningAlgorithm::EdDSA)
+        .build();
+
+    let now = Utc::now().timestamp();
+    let claims = TokenClaims::builder()
+        .sub("user-123")
+        .aud("test-audience")
+        .exp(now + 10000)
+        .build();
+
+    // Generate token
+    let token = generator
+        .generate_token(&pc, claims)
+        .await
+        .expect("Token generation should succeed");
+
+    // Verify the token with the public key
+    let verifier = create_test_verifier(keypair.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
+
+    let verified_claims = verifier
+        .verify_token(&pc, token.as_str())
+        .expect("Token verification should succeed");
+
+    assert_eq!(verified_claims.sub, "user-123");
+    assert_eq!(verified_claims.iss, "did:web:example.com");
+}
+
+#[tokio::test]
+async fn test_vault_signing_key_resolver_missing_key() {
+    // Setup vault client without storing a key
+    let vault_client = Arc::new(MemoryVaultClient::new());
+
+    let pc = ParticipantContext::builder()
+        .id("test-participant")
+        .identifier("did:web:example.com")
+        .audience("test-audience")
+        .build();
+
+    // Create the vault signing key resolver
+    let vault_resolver = Arc::new(
+        VaultSigningKeyResolver::builder()
+            .vault_client(vault_client)
+            .base_path("missing-key")
+            .build(),
+    );
+
+    // Create generator with vault resolver
+    let generator = LocalJwtGenerator::builder()
+        .signing_key_resolver(vault_resolver)
+        .signing_algorithm(SigningAlgorithm::EdDSA)
+        .build();
+
+    let now = Utc::now().timestamp();
+    let claims = TokenClaims::builder()
+        .sub("user-123")
+        .aud("test-audience")
+        .exp(now + 10000)
+        .build();
+
+    // Attempt to generate token should fail
+    let result = generator.generate_token(&pc, claims).await;
+
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+        error_msg.contains("Failed to resolve signing key from vault"),
+        "Error message should mention vault resolution failure"
+    );
+}
+
+#[tokio::test]
+async fn test_vault_signing_key_resolver_different_participants() {
+    // Setup vault client with keys for different participants
+    let keypair1 = generate_ed25519_keypair_pem().expect("Failed to generate keypair 1");
+    let keypair2 = generate_ed25519_keypair_pem().expect("Failed to generate keypair 2");
+
+    let vault_client = Arc::new(MemoryVaultClient::new());
+
+    let pc1 = ParticipantContext::builder()
+        .id("participant-1")
+        .identifier("did:web:example.com")
+        .audience("audience-1")
+        .build();
+
+    let pc2 = ParticipantContext::builder()
+        .id("participant-2")
+        .identifier("did:web:example.com")
+        .audience("audience-2")
+        .build();
+
+    // Create and store SigningKeyRecords as JSON for each participant
+    let key_record1 = SigningKeyRecord::builder()
+        .private_key(std::str::from_utf8(&keypair1.private_key).unwrap())
+        .kid("did:web:example.com#key-1")
+        .key_format(KeyFormat::PEM)
+        .build();
+
+    let key_record1_json = serde_json::to_string(&key_record1).expect("Failed to serialize SigningKeyRecord");
+
+    vault_client
+        .store_secret(&pc1, "signing-key", &key_record1_json)
+        .await
+        .expect("Failed to store secret for participant 1");
+
+    let key_record2 = SigningKeyRecord::builder()
+        .private_key(std::str::from_utf8(&keypair2.private_key).unwrap())
+        .kid("did:web:example.com#key-2")
+        .key_format(KeyFormat::PEM)
+        .build();
+
+    let key_record2_json = serde_json::to_string(&key_record2).expect("Failed to serialize SigningKeyRecord");
+
+    vault_client
+        .store_secret(&pc2, "signing-key", &key_record2_json)
+        .await
+        .expect("Failed to store secret for participant 2");
+
+    // Create the vault signing key resolver
+    let vault_resolver = Arc::new(
+        VaultSigningKeyResolver::builder()
+            .vault_client(vault_client)
+            .base_path("signing-key")
+            .build(),
+    );
+
+    // Create generator
+    let generator = LocalJwtGenerator::builder()
+        .signing_key_resolver(vault_resolver)
+        .signing_algorithm(SigningAlgorithm::EdDSA)
+        .build();
+
+    let now = Utc::now().timestamp();
+
+    // Generate token for participant 1
+    let claims1 = TokenClaims::builder()
+        .sub("user-123")
+        .aud("audience-1")
+        .exp(now + 10000)
+        .build();
+
+    let token1 = generator
+        .generate_token(&pc1, claims1)
+        .await
+        .expect("Token generation for participant 1 should succeed");
+
+    // Generate token for participant 2
+    let claims2 = TokenClaims::builder()
+        .sub("user-456")
+        .aud("audience-2")
+        .exp(now + 10000)
+        .build();
+
+    let token2 = generator
+        .generate_token(&pc2, claims2)
+        .await
+        .expect("Token generation for participant 2 should succeed");
+
+    // Verify token 1 with keypair 1
+    let verifier1 = create_test_verifier(keypair1.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
+    let verified_claims1 = verifier1
+        .verify_token(&pc1, token1.as_str())
+        .expect("Token 1 verification should succeed");
+    assert_eq!(verified_claims1.sub, "user-123");
+
+    // Verify token 2 with keypair 2
+    let verifier2 = create_test_verifier(keypair2.public_key, KeyFormat::PEM, SigningAlgorithm::EdDSA);
+    let verified_claims2 = verifier2
+        .verify_token(&pc2, token2.as_str())
+        .expect("Token 2 verification should succeed");
+    assert_eq!(verified_claims2.sub, "user-456");
+
+    // Verify token 1 with keypair 2 should fail
+    let result = verifier2.verify_token(&pc1, token1.as_str());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_signing_key_record_serialization() {
+    // Create a SigningKeyRecord
+    let record = SigningKeyRecord::builder()
+        .private_key("test-private-key-content")
+        .kid("did:web:example.com#key-123")
+        .key_format(KeyFormat::PEM)
+        .build();
+
+    // Serialize to JSON
+    let json = serde_json::to_string(&record).expect("Failed to serialize");
+
+    // Verify JSON contains expected fields
+    assert!(json.contains("private_key"));
+    assert!(json.contains("test-private-key-content"));
+    assert!(json.contains("kid"));
+    assert!(json.contains("did:web:example.com#key-123"));
+    assert!(json.contains("key_format"));
+    assert!(json.contains("PEM"));
+
+    // Deserialize back
+    let deserialized: SigningKeyRecord = serde_json::from_str(&json).expect("Failed to deserialize");
+
+    // Verify fields match
+    assert_eq!(deserialized.private_key, "test-private-key-content");
+    assert_eq!(deserialized.kid, "did:web:example.com#key-123");
+    assert_eq!(deserialized.key_format, KeyFormat::PEM);
+}
+
+#[test]
+fn test_signing_key_record_round_trip() {
+    // Test with a real-looking PEM key
+    let pem_key = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAbcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP\n-----END PRIVATE KEY-----";
+
+    let original = SigningKeyRecord::builder()
+        .private_key(pem_key)
+        .kid("did:web:example.org#signing-key-1")
+        .key_format(KeyFormat::DER)
+        .build();
+
+    // Serialize and deserialize
+    let json = serde_json::to_string(&original).expect("Failed to serialize");
+    let roundtrip: SigningKeyRecord = serde_json::from_str(&json).expect("Failed to deserialize");
+
+    // Verify exact match
+    assert_eq!(original.private_key, roundtrip.private_key);
+    assert_eq!(original.kid, roundtrip.kid);
+    assert_eq!(original.key_format, roundtrip.key_format);
+}
+
+#[test]
+fn test_signing_key_record_pretty_json() {
+    let record = SigningKeyRecord::builder()
+        .private_key("my-private-key")
+        .kid("my-kid")
+        .key_format(KeyFormat::PEM)
+        .build();
+
+    // Test pretty JSON formatting
+    let pretty_json = serde_json::to_string_pretty(&record).expect("Failed to serialize");
+
+    // Should be multi-line
+    assert!(pretty_json.contains('\n'));
+
+    // Should deserialize correctly
+    let deserialized: SigningKeyRecord = serde_json::from_str(&pretty_json).expect("Failed to deserialize");
+    assert_eq!(deserialized.private_key, "my-private-key");
+    assert_eq!(deserialized.kid, "my-kid");
+    assert_eq!(deserialized.key_format, KeyFormat::PEM);
+}
+
+#[test]
+fn test_signing_key_record_default_key_format() {
+    // Test that key_format defaults to PEM when not specified
+    let record = SigningKeyRecord::builder()
+        .private_key("test-key")
+        .kid("test-kid")
+        .build();
+
+    assert_eq!(record.key_format, KeyFormat::PEM);
+}
+
+#[test]
+fn test_signing_key_record_with_der_format() {
+    // Test with DER format
+    let record = SigningKeyRecord::builder()
+        .private_key("der-key-content")
+        .kid("did:web:test.com#key-der")
+        .key_format(KeyFormat::DER)
+        .build();
+
+    let json = serde_json::to_string(&record).expect("Failed to serialize");
+    assert!(json.contains("DER"));
+
+    let deserialized: SigningKeyRecord = serde_json::from_str(&json).expect("Failed to deserialize");
+    assert_eq!(deserialized.key_format, KeyFormat::DER);
+    assert_eq!(deserialized.private_key, "der-key-content");
 }

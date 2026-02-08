@@ -17,6 +17,7 @@ pub mod jwtutils;
 
 use crate::context::ParticipantContext;
 use crate::util::clock::{Clock, default_clock};
+use async_trait::async_trait;
 use bon::Builder;
 use jsonwebtoken::dangerous::insecure_decode;
 use jsonwebtoken::errors::ErrorKind;
@@ -49,8 +50,9 @@ pub struct TokenClaims {
 }
 
 /// Generates a JWT using the key material associated with a participant context.
+#[async_trait]
 pub trait JwtGenerator: Send + Sync {
-    fn generate_token(
+    async fn generate_token(
         &self,
         participant_context: &ParticipantContext,
         claims: TokenClaims,
@@ -103,7 +105,7 @@ pub enum SigningAlgorithm {
 }
 
 /// Supported key formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum KeyFormat {
     PEM,
     DER,
@@ -119,8 +121,9 @@ impl From<SigningAlgorithm> for Algorithm {
 }
 
 /// Resolves signing keys for the participant context.
+#[async_trait]
 pub trait SigningKeyResolver: Send + Sync {
-    fn resolve_key(&self, participant_context: &ParticipantContext) -> Result<KeyMaterial, JwtGenerationError>;
+    async fn resolve_key(&self, participant_context: &ParticipantContext) -> Result<KeyMaterial, JwtGenerationError>;
 }
 
 #[derive(Builder, Clone)]
@@ -162,13 +165,14 @@ impl LocalJwtGenerator {
     }
 }
 
+#[async_trait]
 impl JwtGenerator for LocalJwtGenerator {
-    fn generate_token(
+    async fn generate_token(
         &self,
         participant_context: &ParticipantContext,
         claims: TokenClaims,
     ) -> Result<String, JwtGenerationError> {
-        let key_result = self.signing_key_resolver.resolve_key(participant_context)?;
+        let key_result = self.signing_key_resolver.resolve_key(participant_context).await?;
 
         let algorithm = self.signing_algorithm.into();
         let encoding_key = self.load_encoding_key(&key_result.key_format, &key_result.key)?;
