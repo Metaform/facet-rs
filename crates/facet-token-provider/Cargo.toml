@@ -1,5 +1,5 @@
 [package]
-name = "facet-token-provider"
+name = "dsdk-facet-token-provider"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
